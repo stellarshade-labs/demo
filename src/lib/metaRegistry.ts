@@ -7,6 +7,7 @@ import {
 } from '@stellar/stellar-sdk';
 import type { TransactionSigner } from 'stellar-shade';
 import { NETWORK } from '@/config/network';
+import type { ReceiveMethod } from '@/identity/identityStore';
 
 /**
  * Meta-address resolution — the one piece Shade itself does not provide.
@@ -84,9 +85,20 @@ export async function payloadToMetaAddress(payload: Uint8Array): Promise<string>
 }
 
 export type ResolveOutcome =
-  | { status: 'found'; metaAddress: string }
+  | { status: 'found'; metaAddress: string; method: ReceiveMethod }
   | { status: 'not-registered' }
   | { status: 'no-account' };
+
+/** Read the receiver's published delivery-method preference, if any. */
+function decodeMethod(encoded?: string): ReceiveMethod | undefined {
+  if (!encoded) return undefined;
+  try {
+    const text = new TextDecoder().decode(base64ToBytes(encoded));
+    return text === 'account' || text === 'pool' ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // Resolutions are stable within a session and a sender may retype an address
 // several times; avoid hammering Horizon for the same answer.
@@ -114,7 +126,10 @@ export async function resolveMetaAddress(address: string): Promise<ResolveOutcom
         // Someone wrote a differently-shaped value under our key.
         outcome = { status: 'not-registered' };
       } else {
-        outcome = { status: 'found', metaAddress: await payloadToMetaAddress(payload) };
+        // Method preference lives in a sibling data entry; default to pool when
+        // absent so unpublished/legacy accounts still resolve to the safe method.
+        const method = decodeMethod(account.data_attr?.[NETWORK.metaMethodKey]) ?? 'pool';
+        outcome = { status: 'found', metaAddress: await payloadToMetaAddress(payload), method };
       }
     }
   } catch (error) {
@@ -134,68 +149,88 @@ export function invalidateResolution(address: string): void {
   resolveCache.delete(address.trim());
 }
 
+async function submitSigned(
+  tx: Transaction,
+  address: string,
+  signTransaction: TransactionSigner,
+): Promise<{ txHash: string }> {
+  const signedXdr = await signTransaction(tx.toXDR(), {
+    networkPassphrase: NETWORK.passphrase,
+    address,
+  });
+  const signed = TransactionBuilder.fromXDR(signedXdr, NETWORK.passphrase) as Transaction;
+  const result = await horizon.submitTransaction(signed);
+  invalidateResolution(address);
+  return { txHash: result.hash };
+}
+
 /**
- * Publish `metaAddress` as a data entry on `address`, signed by the connected
- * wallet. Creating a data entry raises the account's base reserve by 0.5 XLM.
+ * Publish `metaAddress` (and optionally the receiver's method preference) as
+ * data entries on `address`. Creating a data entry raises the account's base
+ * reserve by 0.5 XLM each.
  */
 export async function publishMetaAddress(
   address: string,
   metaAddress: string,
   signTransaction: TransactionSigner,
+  method?: ReceiveMethod,
 ): Promise<{ txHash: string }> {
   const payload = metaAddressToPayload(metaAddress);
   const account = await horizon.loadAccount(address);
 
+  const builder = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK.passphrase,
+  }).addOperation(
+    Operation.manageData({ name: NETWORK.metaDataKey, value: Buffer.from(payload) }),
+  );
+
+  if (method) {
+    builder.addOperation(
+      Operation.manageData({ name: NETWORK.metaMethodKey, value: Buffer.from(method, 'utf8') }),
+    );
+  }
+
+  return submitSigned(builder.setTimeout(180).build(), address, signTransaction);
+}
+
+/** Update just the published method preference (account already published). */
+export async function publishReceiveMethod(
+  address: string,
+  method: ReceiveMethod,
+  signTransaction: TransactionSigner,
+): Promise<{ txHash: string }> {
+  const account = await horizon.loadAccount(address);
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: NETWORK.passphrase,
   })
     .addOperation(
-      Operation.manageData({
-        name: NETWORK.metaDataKey,
-        value: Buffer.from(payload),
-      }),
+      Operation.manageData({ name: NETWORK.metaMethodKey, value: Buffer.from(method, 'utf8') }),
     )
     .setTimeout(180)
     .build();
 
-  const signedXdr = await signTransaction(tx.toXDR(), {
-    networkPassphrase: NETWORK.passphrase,
-    address,
-  });
-
-  const signed = TransactionBuilder.fromXDR(signedXdr, NETWORK.passphrase) as Transaction;
-  const result = await horizon.submitTransaction(signed);
-
-  invalidateResolution(address);
-  return { txHash: result.hash };
+  return submitSigned(tx, address, signTransaction);
 }
 
-/** Remove a published meta-address, releasing the 0.5 XLM reserve. */
+/** Remove the published meta-address and method entry, releasing their reserve. */
 export async function unpublishMetaAddress(
   address: string,
   signTransaction: TransactionSigner,
 ): Promise<{ txHash: string }> {
   const account = await horizon.loadAccount(address);
-
-  const tx = new TransactionBuilder(account, {
+  const builder = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: NETWORK.passphrase,
-  })
-    .addOperation(Operation.manageData({ name: NETWORK.metaDataKey, value: null }))
-    .setTimeout(180)
-    .build();
+  }).addOperation(Operation.manageData({ name: NETWORK.metaDataKey, value: null }));
 
-  const signedXdr = await signTransaction(tx.toXDR(), {
-    networkPassphrase: NETWORK.passphrase,
-    address,
-  });
+  // Only clear the method entry if one actually exists, or the op fails.
+  if (account.data_attr?.[NETWORK.metaMethodKey]) {
+    builder.addOperation(Operation.manageData({ name: NETWORK.metaMethodKey, value: null }));
+  }
 
-  const signed = TransactionBuilder.fromXDR(signedXdr, NETWORK.passphrase) as Transaction;
-  const result = await horizon.submitTransaction(signed);
-
-  invalidateResolution(address);
-  return { txHash: result.hash };
+  return submitSigned(builder.setTimeout(180).build(), address, signTransaction);
 }
 
 function base64ToBytes(value: string): Uint8Array {

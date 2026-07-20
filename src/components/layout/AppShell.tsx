@@ -1,22 +1,27 @@
 import type { ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { ArrowUpRight, History, Inbox, Send } from 'lucide-react';
+import { ArrowUpRight, History, Inbox, Lock, Send, Settings, Sparkles } from 'lucide-react';
 import { NETWORK } from '@/config/network';
 import { useServiceHealth } from '@/lib/useServiceHealth';
 import { useWallet } from '@/wallet/WalletProvider';
+import { useIdentity } from '@/identity/IdentityProvider';
 import { ConnectButton } from '@/components/wallet/ConnectButton';
 import { StatusDot } from '@/components/ui/Status';
+import { ThemeToggle } from '@/theme/ThemeToggle';
 import { ShadeMark } from './ShadeMark';
 
 const NAV = [
-  { to: '/send', label: 'Send', Icon: Send },
-  { to: '/receive', label: 'Receive', Icon: Inbox },
-  { to: '/history', label: 'History', Icon: History },
+  { to: '/send', label: 'Send', Icon: Send, tour: 'nav-send' },
+  { to: '/receive', label: 'Receive', Icon: Inbox, tour: 'nav-receive' },
+  { to: '/history', label: 'History', Icon: History, tour: 'nav-history' },
+  { to: '/settings', label: 'Settings', Icon: Settings, tour: 'nav-settings' },
+  { to: '/demo', label: 'Demo', Icon: Sparkles, tour: 'nav-demo' },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const health = useServiceHealth();
   const { networkMismatch } = useWallet();
+  const { lock } = useIdentity();
 
   return (
     <div className="flex min-h-screen bg-ink-950">
@@ -30,10 +35,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex flex-col py-3">
-          {NAV.map(({ to, label, Icon }) => (
+          {NAV.map(({ to, label, Icon, tour }) => (
             <NavLink
               key={to}
               to={to}
+              data-tour={tour}
               className={({ isActive }) =>
                 `relative flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors max-lg:justify-center ${
                   isActive
@@ -76,7 +82,20 @@ export function AppShell({ children }: { children: ReactNode }) {
               {NETWORK.contractId}
             </span>
           </div>
-          <ConnectButton />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button
+              type="button"
+              onClick={lock}
+              data-tour="lock"
+              aria-label="Lock identity"
+              title="Lock identity"
+              className="inline-flex size-8 items-center justify-center rounded-[3px] border border-ink-600 text-ink-300 transition-colors hover:border-ink-400 hover:text-ink-50"
+            >
+              <Lock className="size-4" />
+            </button>
+            <ConnectButton />
+          </div>
         </header>
 
         {networkMismatch && (

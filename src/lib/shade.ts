@@ -15,7 +15,10 @@ import { NETWORK } from '@/config/network';
 export const stealthClient = new StealthClient({
   network: NETWORK.name,
   contractId: NETWORK.contractId,
-  methods: ['pool'],
+  // Both delivery methods are enabled: the receiver picks which one senders use
+  // (see settings + metaRegistry method preference). 'pool' routes value through
+  // the Soroban contract; 'account' pays a one-time classic Stellar account.
+  methods: ['pool', 'account'],
   horizonUrl: NETWORK.horizonUrl,
   indexerUrl: NETWORK.indexerUrl,
   // NOTE: `relayer` is deliberately NOT set here. A constructor-level relayer
@@ -29,8 +32,8 @@ export const relayerClient = new RelayerClient(NETWORK.relayerUrl);
 export const indexerClient = new IndexerClient(NETWORK.indexerUrl);
 
 /**
- * The only delivery method this demo enables. The pool method routes value
- * through the Soroban stealth-pool contract, which is what `VITE_SHADE_CONTRACT_ID`
- * points at.
+ * Fallback delivery method when the receiver's preference is unknown (e.g. a
+ * raw meta-address with no account to read, or an unpublished account). Pool is
+ * the safest, most private default.
  */
-export const DELIVERY_METHOD = 'pool' as const;
+export const DEFAULT_METHOD = 'pool' as const;

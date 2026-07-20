@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { looksLikeMetaAddress, looksLikeStellarAddress } from '@/lib/format';
 import { resolveMetaAddress } from '@/lib/metaRegistry';
 import { toUserMessage } from '@/lib/errors';
+import type { ReceiveMethod } from '@/identity/identityStore';
 
 export type SendMode = 'public' | 'meta';
 
@@ -9,7 +10,7 @@ export type Resolution =
   | { state: 'idle' }
   | { state: 'invalid'; message: string }
   | { state: 'resolving' }
-  | { state: 'resolved'; metaAddress: string; via: SendMode }
+  | { state: 'resolved'; metaAddress: string; via: SendMode; method: ReceiveMethod }
   | { state: 'unregistered' }
   | { state: 'no-account' }
   | { state: 'error'; message: string };
@@ -37,7 +38,9 @@ export function useRecipientResolver(input: string, mode: SendMode): Resolution 
     if (mode === 'meta') {
       setResolution(
         looksLikeMetaAddress(value)
-          ? { state: 'resolved', metaAddress: value, via: 'meta' }
+          ? // A raw meta-address carries no method preference, so default to the
+            // safe method — pool.
+            { state: 'resolved', metaAddress: value, via: 'meta', method: 'pool' }
           : {
               state: 'invalid',
               message: 'Expected a meta-address beginning with shade:stellar:',
@@ -62,7 +65,12 @@ export function useRecipientResolver(input: string, mode: SendMode): Resolution 
         const outcome = await resolveMetaAddress(value);
         if (cancelled) return;
         if (outcome.status === 'found') {
-          setResolution({ state: 'resolved', metaAddress: outcome.metaAddress, via: 'public' });
+          setResolution({
+            state: 'resolved',
+            metaAddress: outcome.metaAddress,
+            via: 'public',
+            method: outcome.method,
+          });
         } else if (outcome.status === 'no-account') {
           setResolution({ state: 'no-account' });
         } else {

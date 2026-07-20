@@ -1,101 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
-import { Fingerprint, Globe, Lock, RefreshCw, Trash2 } from 'lucide-react';
+import { Dice5, Globe, KeyRound, RefreshCw, Trash2, Wallet } from 'lucide-react';
 import { NETWORK } from '@/config/network';
-import { toUserMessage } from '@/lib/errors';
-import {
-  publishMetaAddress,
-  resolveMetaAddress,
-  unpublishMetaAddress,
-} from '@/lib/metaRegistry';
-import { useWallet } from '@/wallet/WalletProvider';
-import { useStealthKeys } from '@/stealth/StealthKeysProvider';
+import { truncate } from '@/lib/format';
+import { useIdentity } from '@/identity/IdentityProvider';
+import { useIdentityStore } from '@/identity/identityStore';
+import { usePublish } from '@/identity/usePublish';
 import { useScan } from '@/stealth/useScan';
-import { useSession } from '@/store/session';
 import { Panel, Well } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { CopyField } from '@/components/ui/CopyField';
-import { EmptyState, TxResult } from '@/components/ui/Status';
+import { Notice, TxResult } from '@/components/ui/Status';
 import { ClaimList } from './ClaimList';
 
-type PublishState = 'unknown' | 'published' | 'not-published';
+const SOURCE_META = {
+  wallet: { Icon: Wallet, label: 'Wallet-derived' },
+  mnemonic: { Icon: KeyRound, label: 'Recovery phrase' },
+  random: { Icon: Dice5, label: 'Random' },
+} as const;
 
 export function ReceivePage() {
-  const { address, status, signTransaction, canDeriveKeys, connector } = useWallet();
-  const { keys, unlocked, unlocking, error: keyError, unlock } = useStealthKeys();
-  const addTx = useSession((s) => s.addTx);
-  const updateTx = useSession((s) => s.updateTx);
+  const { keys, metaAddress, payoutAddress, payoutSecret, source } = useIdentity();
+  const settings = useIdentityStore((s) => s.settings);
+  const pub = usePublish();
 
-  const scan = useScan(address, keys);
+  const scan = useScan(payoutAddress, keys, { auto: settings.autoScanOnOpen });
 
-  const [publishState, setPublishState] = useState<PublishState>('unknown');
-  const [publishing, setPublishing] = useState(false);
-  const [result, setResult] = useState<
-    { status: 'success' | 'error'; message: string; txHash?: string } | null
-  >(null);
-
-  const connected = status === 'connected' && Boolean(address);
-
-  const refreshPublishState = useCallback(async () => {
-    if (!address) return;
-    try {
-      const outcome = await resolveMetaAddress(address);
-      setPublishState(outcome.status === 'found' ? 'published' : 'not-published');
-    } catch {
-      setPublishState('unknown');
-    }
-  }, [address]);
-
-  useEffect(() => {
-    void refreshPublishState();
-  }, [refreshPublishState]);
-
-  const handlePublish = async () => {
-    if (!address || !keys) return;
-    setPublishing(true);
-    setResult(null);
-
-    const txId = addTx({ kind: 'publish', status: 'pending', counterparty: address });
-    try {
-      const { txHash } = await publishMetaAddress(address, keys.metaAddress, signTransaction);
-      updateTx(txId, { status: 'success', txHash });
-      setResult({
-        status: 'success',
-        message: 'Meta-address published. Senders can now reach you by your public address.',
-        txHash,
-      });
-      setPublishState('published');
-    } catch (err) {
-      const message = toUserMessage(err);
-      updateTx(txId, { status: 'error', error: message });
-      setResult({ status: 'error', message });
-    } finally {
-      setPublishing(false);
-    }
-  };
-
-  const handleUnpublish = async () => {
-    if (!address) return;
-    setPublishing(true);
-    setResult(null);
-
-    const txId = addTx({ kind: 'unpublish', status: 'pending', counterparty: address });
-    try {
-      const { txHash } = await unpublishMetaAddress(address, signTransaction);
-      updateTx(txId, { status: 'success', txHash });
-      setResult({
-        status: 'success',
-        message: 'Meta-address removed. Your 0.5 XLM reserve is released.',
-        txHash,
-      });
-      setPublishState('not-published');
-    } catch (err) {
-      const message = toUserMessage(err);
-      updateTx(txId, { status: 'error', error: message });
-      setResult({ status: 'error', message });
-    } finally {
-      setPublishing(false);
-    }
-  };
+  const sourceMeta = source ? SOURCE_META[source] : null;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -103,160 +32,147 @@ export function ReceivePage() {
         <div>
           <h1 className="text-xl font-bold tracking-tight text-ink-50">Receive</h1>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-400">
-            Your stealth keys are derived from a wallet signature and held only in this tab. They
-            are never written to disk.
+            Share your meta-address, or publish it so anyone can pay you by your public address.
+            Payments land at one-time addresses only you can find.
           </p>
         </div>
 
-        {!connected ? (
-          <Panel>
-            <EmptyState
-              icon={<Lock className="size-6" />}
-              title="Connect a wallet"
-              description="Your stealth identity is derived from your wallet, so there is nothing to show until one is connected."
-            />
-          </Panel>
-        ) : !canDeriveKeys ? (
-          <Panel>
-            <EmptyState
-              icon={<Lock className="size-6" />}
-              title={`${connector?.name ?? 'This wallet'} can't sign messages`}
-              description="Stealth keys are derived from a signed message. Reconnect with Freighter to receive payments — sending works on any wallet."
-            />
-          </Panel>
-        ) : !unlocked ? (
-          <Panel>
-            <EmptyState
-              icon={<Fingerprint className="size-6" />}
-              title="Unlock your stealth identity"
-              description="Sign one message to derive your spend and view keys. The same signature always produces the same identity, on any device."
-              action={
-                <Button variant="primary" loading={unlocking} onClick={() => void unlock()}>
-                  Sign to unlock
-                </Button>
-              }
-            />
-            {keyError && (
-              <div className="border-t border-signal-bad/30 bg-signal-bad/5 px-5 py-3 text-[13px] text-signal-bad">
-                {keyError}
+        <Panel
+          eyebrow="Your identity"
+          title="Meta-address"
+          action={
+            <span
+              className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                pub.publishState === 'published'
+                  ? 'border-signal-ok/40 bg-signal-ok/10 text-signal-ok'
+                  : 'border-ink-600 text-ink-400'
+              }`}
+            >
+              {pub.publishState === 'published' ? 'On-chain' : 'Private'}
+            </span>
+          }
+        >
+          <p className="mb-3 text-[13px] leading-relaxed text-ink-400">
+            Share this with anyone who wants to pay you. It reveals nothing about the payments you
+            receive.
+          </p>
+          <div data-tour="meta-address">
+            <CopyField value={metaAddress ?? ''} />
+          </div>
+
+          <div className="mt-5 border-t border-ink-700 pt-5" data-tour="publish">
+            <div className="label-eyebrow mb-2">Reachable by public address</div>
+            <p className="mb-3 text-[13px] leading-relaxed text-ink-400">
+              Publishing writes your meta-address (and preferred method,{' '}
+              <span className="font-mono">{settings.receiveMethod}</span>) to your account so senders
+              can just type{' '}
+              <span className="font-mono text-ink-300">{payoutAddress?.slice(0, 6)}…</span>. It locks
+              0.5 XLM as reserve, refunded if you remove it.
+            </p>
+
+            {!pub.canManage && (
+              <div className="mb-3">
+                <Notice tone="info">
+                  {source === 'wallet'
+                    ? 'Connect your wallet to publish or manage your address.'
+                    : 'Your payout account needs a little XLM before you can publish. Fund it, then come back.'}
+                </Notice>
               </div>
             )}
-          </Panel>
-        ) : (
-          <>
-            <Panel
-              eyebrow="Your identity"
-              title="Meta-address"
-              action={
-                <span
-                  className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-                    publishState === 'published'
-                      ? 'border-signal-ok/40 bg-signal-ok/10 text-signal-ok'
-                      : 'border-ink-600 text-ink-400'
-                  }`}
-                >
-                  {publishState === 'published' ? 'On-chain' : 'Private'}
-                </span>
-              }
-            >
-              <p className="mb-3 text-[13px] leading-relaxed text-ink-400">
-                Share this with anyone who wants to pay you. It reveals nothing about the payments
-                you receive.
-              </p>
-              <CopyField value={keys!.metaAddress} />
 
-              <div className="mt-5 border-t border-ink-700 pt-5">
-                <div className="label-eyebrow mb-2">Reachable by public address</div>
-                <p className="mb-3 text-[13px] leading-relaxed text-ink-400">
-                  Publishing writes your meta-address to a data entry on your own account, so
-                  senders can just type{' '}
-                  <span className="font-mono text-ink-300">{address?.slice(0, 6)}…</span> instead of
-                  the long string above. It locks 0.5 XLM as account reserve, refunded if you
-                  remove it.
-                </p>
-
-                {publishState === 'published' ? (
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Well className="flex-1 text-[13px] text-signal-ok">
-                      Published under{' '}
-                      <span className="font-mono">{NETWORK.metaDataKey}</span>
-                    </Well>
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      loading={publishing}
-                      icon={<Trash2 className="size-3.5" />}
-                      onClick={handleUnpublish}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="primary"
-                    loading={publishing}
-                    icon={<Globe className="size-4" />}
-                    onClick={handlePublish}
-                  >
-                    Publish meta-address
-                  </Button>
-                )}
-
-                {result && (
-                  <div className="mt-4">
-                    <TxResult
-                      status={result.status}
-                      message={result.message}
-                      txHash={result.txHash}
-                      onDismiss={() => setResult(null)}
-                    />
-                  </div>
-                )}
-              </div>
-            </Panel>
-
-            <Panel
-              eyebrow="Incoming"
-              title="Detected payments"
-              action={
+            {pub.publishState === 'published' ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Well className="flex-1 text-[13px] text-signal-ok">
+                  Published under <span className="font-mono">{NETWORK.metaDataKey}</span>
+                </Well>
                 <Button
-                  variant="ghost"
+                  variant="danger"
                   size="sm"
-                  loading={scan.loading}
-                  icon={<RefreshCw className="size-3.5" />}
-                  onClick={() => void scan.scan()}
+                  disabled={!pub.canManage}
+                  loading={pub.busy}
+                  icon={<Trash2 className="size-3.5" />}
+                  onClick={() => void pub.unpublish()}
                 >
-                  Rescan
+                  Remove
                 </Button>
-              }
-              bodyClassName=""
+              </div>
+            ) : (
+              <Button
+                variant="primary"
+                disabled={!pub.canManage}
+                loading={pub.busy}
+                icon={<Globe className="size-4" />}
+                onClick={() => void pub.publish()}
+              >
+                Publish meta-address
+              </Button>
+            )}
+
+            {pub.result && (
+              <div className="mt-4">
+                <TxResult
+                  status={pub.result.status}
+                  message={pub.result.message}
+                  txHash={pub.result.txHash}
+                  onDismiss={() => pub.setResult(null)}
+                />
+              </div>
+            )}
+          </div>
+        </Panel>
+
+        <Panel
+          eyebrow="Incoming"
+          title="Detected payments"
+          action={
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={scan.loading}
+              icon={<RefreshCw className="size-3.5" />}
+              onClick={() => void scan.scan()}
             >
-              <ClaimList scan={scan} />
-            </Panel>
-          </>
-        )}
+              {settings.autoScanOnOpen ? 'Rescan' : 'Scan'}
+            </Button>
+          }
+          bodyClassName=""
+        >
+          <div data-tour="scan">
+            <ClaimList scan={scan} />
+          </div>
+        </Panel>
       </div>
 
       <aside className="space-y-5">
-        <Panel eyebrow="Key handling" title="What's stored where">
+        <Panel eyebrow="Identity" title="This identity">
           <dl className="space-y-3.5 text-[13px]">
-            <StorageRow label="Spend & view keys" value="Memory only" tone="strong" />
-            <StorageRow label="Public address" value="localStorage" />
-            <StorageRow label="Sent transactions" value="localStorage" />
-            <StorageRow label="Detected payments" value="Encrypted (AES-GCM)" tone="strong" />
+            <InfoRow label="Source">
+              <span className="inline-flex items-center gap-1.5 text-ink-100">
+                {sourceMeta && <sourceMeta.Icon className="size-3.5 text-copper-400" />}
+                {sourceMeta?.label ?? '—'}
+              </span>
+            </InfoRow>
+            <InfoRow label="Payout account">
+              <span className="font-mono text-ink-300">{truncate(payoutAddress, 6, 4)}</span>
+            </InfoRow>
+            <InfoRow label="Spend & view keys">
+              <span className="font-medium text-copper-300">Encrypted at rest</span>
+            </InfoRow>
+            <InfoRow label="Detected payments">
+              <span className="font-medium text-copper-300">Encrypted (AES-GCM)</span>
+            </InfoRow>
           </dl>
           <p className="mt-4 border-t border-ink-700 pt-4 text-xs leading-relaxed text-ink-500">
-            Detected payments link a one-time address to your identity, so they are sealed with a
-            key derived from your view key. Disconnecting wipes the cache.
+            Your identity is sealed with your passphrase and unlocked here for 6 hours of use. Lock
+            it anytime from the header.
           </p>
         </Panel>
 
-        {unlocked && (
-          <Panel eyebrow="Derivation" title="Deterministic">
+        {payoutSecret && (
+          <Panel eyebrow="Claiming" title="No wallet needed">
             <p className="text-[13px] leading-relaxed text-ink-400">
-              Your identity comes from a signature over a fixed message, so connecting the same
-              wallet on any browser recreates the same meta-address. There is no seed phrase to back
-              up.
+              This identity claims to a payout account derived from your keys. When the relayer is
+              available it sponsors the fee, so you can receive without connecting a wallet at all.
             </p>
           </Panel>
         )}
@@ -265,21 +181,11 @@ export function ReceivePage() {
   );
 }
 
-function StorageRow({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: 'strong';
-}) {
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="text-ink-400">{label}</dt>
-      <dd className={tone === 'strong' ? 'font-medium text-copper-300' : 'text-ink-300'}>
-        {value}
-      </dd>
+      <dd className="min-w-0 truncate text-right">{children}</dd>
     </div>
   );
 }

@@ -7,26 +7,32 @@ import { toUserMessage } from '@/lib/errors';
 import { assetLabel, formatAmount, timeAgo, truncate } from '@/lib/format';
 import { useServiceHealth } from '@/lib/useServiceHealth';
 import { useWallet } from '@/wallet/WalletProvider';
-import { useStealthKeys } from '@/stealth/StealthKeysProvider';
-import type { useScan } from '@/stealth/useScan';
+import { useIdentity } from '@/identity/IdentityProvider';
+import { useIdentityStore } from '@/identity/identityStore';
 import { useSession } from '@/store/session';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, Skeleton, TxResult } from '@/components/ui/Status';
+import type { useScan } from '@/stealth/useScan';
 
 type ScanApi = ReturnType<typeof useScan>;
 
 export function ClaimList({ scan }: { scan: ScanApi }) {
-  const { address, signTransaction } = useWallet();
-  const { keys } = useStealthKeys();
+  const { signTransaction } = useWallet();
+  const { keys, payoutAddress, payoutSecret } = useIdentity();
+  const useRelayerByDefault = useIdentityStore((s) => s.settings.useRelayerByDefault);
   const addTx = useSession((s) => s.addTx);
   const updateTx = useSession((s) => s.updateTx);
 
   const health = useServiceHealth();
   const [claiming, setClaiming] = useState<string | null>(null);
-  const [relayerOptIn, setRelayerOptIn] = useState(true);
+  const [relayerOptIn, setRelayerOptIn] = useState(useRelayerByDefault);
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
   >(null);
+
+  // Wallet-free identities have no external signer, so the relayer (or the
+  // payout secret paying its own fee) is how their claims reach the chain.
+  const walletFree = Boolean(payoutSecret);
 
   // A credit-gated relayer needs a prepaid funding account and a signed
   // proof-of-control that this demo doesn't carry, so relaying is simply not
@@ -37,7 +43,7 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
   const available = scan.payments.filter((p) => !scan.claimed.has(p.stealthAddress));
 
   const handleClaim = async (payment: Payment) => {
-    if (!keys || !address) return;
+    if (!keys || !payoutAddress) return;
     setClaiming(payment.stealthAddress);
     setResult(null);
 
@@ -47,17 +53,24 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
       amount: payment.amount,
       asset: assetLabel(payment),
       stealthAddress: payment.stealthAddress,
-      counterparty: address,
+      counterparty: payoutAddress,
     });
 
     try {
-      const receipt = await stealthClient.claim(payment, address, {
+      const receipt = await stealthClient.claim(payment, payoutAddress, {
         keys,
-        signTransaction,
-        // Pool claims need a fee payer; with a wallet signer the SDK wants the
-        // fee payer's PUBLIC key here and delegates signing back to us.
-        feePayerAddress: address,
-        ...(useRelayer ? { relay: NETWORK.relayerUrl } : {}),
+        ...(walletFree
+          ? // Self-custodied payout: sponsor via the relayer when we can, else
+            // pay the fee directly from the payout secret.
+            useRelayer
+            ? { relay: NETWORK.relayerUrl }
+            : { feePayer: payoutSecret! }
+          : // Wallet payout: the wallet is the fee payer and external signer.
+            {
+              signTransaction,
+              feePayerAddress: payoutAddress,
+              ...(useRelayer ? { relay: NETWORK.relayerUrl } : {}),
+            }),
       });
 
       updateTx(txId, { status: 'success', txHash: receipt.txHash });
@@ -172,7 +185,9 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
               ? '— unavailable, relayer is credit-gated'
               : health.relayer === 'down'
                 ? '— unavailable, relayer unreachable'
-                : '— hides your IP and fee-payer link'}
+                : walletFree
+                  ? '— sponsors the fee, no wallet needed'
+                  : '— hides your IP and fee-payer link'}
           </span>
         </label>
         <span className="font-mono text-[10px] text-ink-600">

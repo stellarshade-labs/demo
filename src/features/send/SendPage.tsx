@@ -1,16 +1,22 @@
 import { useState } from 'react';
-import { AtSign, Check, KeyRound, Loader2, Send, ShieldQuestion, UserX } from 'lucide-react';
-import { stealthClient, DELIVERY_METHOD } from '@/lib/shade';
+import { AtSign, Check, KeyRound, Loader2, Send, ShieldQuestion, TriangleAlert, UserX } from 'lucide-react';
+import { stealthClient, DEFAULT_METHOD } from '@/lib/shade';
 import { toUserMessage } from '@/lib/errors';
 import { truncateMeta } from '@/lib/format';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useSession } from '@/store/session';
+import type { ReceiveMethod } from '@/identity/identityStore';
 import { Panel, Well } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Tabs } from '@/components/ui/Tabs';
 import { Notice, TxResult } from '@/components/ui/Status';
 import { useRecipientResolver, type SendMode } from './useRecipientResolver';
+
+function isTokenAsset(asset: string): boolean {
+  const a = asset.trim();
+  return a !== '' && a.toUpperCase() !== 'XLM' && a.toLowerCase() !== 'native';
+}
 
 export function SendPage() {
   const { address, status, signTransaction, networkMismatch } = useWallet();
@@ -21,6 +27,8 @@ export function SendPage() {
 
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  const [asset, setAsset] = useState('');
+  const [methodOverride, setMethodOverride] = useState<ReceiveMethod | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
@@ -31,16 +39,43 @@ export function SendPage() {
 
   const parsedAmount = Number.parseFloat(amount);
   const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+  const token = isTokenAsset(asset);
+  const assetCode = token ? asset.trim() : 'XLM';
+
+  // The receiver chose the method; the sender only overrides when the account
+  // method would cost them the 1.5 XLM account-funding (token case).
+  const resolvedMethod: ReceiveMethod =
+    resolution.state === 'resolved' ? resolution.method : DEFAULT_METHOD;
+  const effectiveMethod: ReceiveMethod = methodOverride ?? resolvedMethod;
+
+  const accountTokenWarning =
+    resolution.state === 'resolved' && effectiveMethod === 'account' && token;
+  // The account method funds a classic native payment; the SDK enforces > 1 XLM.
+  const accountNativeTooLow =
+    resolution.state === 'resolved' && effectiveMethod === 'account' && !token && parsedAmount <= 1;
+
   const canSubmit =
-    connected && resolution.state === 'resolved' && amountValid && !submitting && !networkMismatch;
+    connected &&
+    resolution.state === 'resolved' &&
+    amountValid &&
+    !accountNativeTooLow &&
+    !submitting &&
+    !networkMismatch;
+
+  const resetForm = () => {
+    setRecipient('');
+    setAmount('');
+    setAsset('');
+    setMethodOverride(null);
+  };
 
   const handleModeChange = (mode: SendMode) => {
     setSendMode(mode);
-    setRecipient('');
+    resetForm();
     setResult(null);
   };
 
-  const handleSend = async () => {
+  const handleSend = async (method: ReceiveMethod = effectiveMethod) => {
     if (resolution.state !== 'resolved' || !address) return;
 
     setSubmitting(true);
@@ -50,20 +85,22 @@ export function SendPage() {
       kind: 'send',
       status: 'pending',
       amount: parsedAmount,
-      asset: 'XLM',
+      asset: assetCode,
       counterparty: recipient.trim(),
     });
 
     try {
-      // Both tabs land here identically — the public tab has simply resolved
-      // the typed G-address into the meta-address the recipient published.
       const receipt = await stealthClient.send(
         resolution.metaAddress,
         parsedAmount,
         // With an external signer the SDK expects the sender's PUBLIC key where
         // a secret would otherwise go.
         address,
-        { method: DELIVERY_METHOD, signTransaction },
+        {
+          method,
+          ...(token ? { asset: assetCode } : {}),
+          signTransaction,
+        },
       );
 
       updateTx(txId, {
@@ -73,11 +110,10 @@ export function SendPage() {
       });
       setResult({
         status: 'success',
-        message: `Sent ${parsedAmount} XLM to a one-time stealth address.`,
+        message: `Sent ${parsedAmount} ${assetCode} to a one-time stealth address via ${method}.`,
         txHash: receipt.txHash,
       });
-      setAmount('');
-      setRecipient('');
+      resetForm();
     } catch (err) {
       const message = toUserMessage(err);
       updateTx(txId, { status: 'error', error: message });
@@ -108,7 +144,7 @@ export function SendPage() {
             ]}
           />
 
-          <div className="space-y-5 p-5">
+          <div className="space-y-5 p-5" data-tour="send-form">
             {sendMode === 'public' ? (
               <Field
                 label="Recipient account"
@@ -117,7 +153,10 @@ export function SendPage() {
                 autoComplete="off"
                 spellCheck={false}
                 value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
+                onChange={(e) => {
+                  setRecipient(e.target.value);
+                  setMethodOverride(null);
+                }}
                 error={resolution.state === 'invalid' ? resolution.message : null}
                 hint="We look up the meta-address this account published on-chain."
               />
@@ -129,13 +168,16 @@ export function SendPage() {
                 autoComplete="off"
                 spellCheck={false}
                 value={recipient}
-                onChange={(e) => setRecipient(e.target.value)}
+                onChange={(e) => {
+                  setRecipient(e.target.value);
+                  setMethodOverride(null);
+                }}
                 error={resolution.state === 'invalid' ? resolution.message : null}
                 hint="Shared with you directly by the recipient — no lookup needed."
               />
             )}
 
-            <ResolutionStatus resolution={resolution} mode={sendMode} />
+            <ResolutionStatus resolution={resolution} mode={sendMode} method={effectiveMethod} />
 
             <Field
               label="Amount"
@@ -147,24 +189,51 @@ export function SendPage() {
               mono
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              adornment={<span className="font-mono text-xs text-ink-400">XLM</span>}
-              hint="Native XLM, routed through the Shade pool contract."
+              adornment={<span className="font-mono text-xs text-ink-400">{assetCode}</span>}
+              hint={
+                accountNativeTooLow
+                  ? undefined
+                  : 'Leave the asset below empty for native XLM.'
+              }
+              error={accountNativeTooLow ? 'The account method requires more than 1 XLM.' : null}
             />
 
-            {!connected && (
-              <Notice tone="info">Connect a wallet to send.</Notice>
+            <Field
+              label="Asset (optional)"
+              placeholder="XLM  ·  or  USDC:GA…"
+              mono
+              autoComplete="off"
+              spellCheck={false}
+              value={asset}
+              onChange={(e) => setAsset(e.target.value)}
+              hint="Format CODE:ISSUER for a token. Empty means native XLM."
+            />
+
+            {!connected && <Notice tone="info">Connect a wallet to send.</Notice>}
+
+            {connected && accountTokenWarning ? (
+              <AccountTokenWarning
+                asset={assetCode}
+                submitting={submitting}
+                onUsePool={() => setMethodOverride('pool')}
+                onProceed={() => void handleSend('account')}
+              />
+            ) : (
+              <Button
+                variant="primary"
+                className="w-full"
+                disabled={!canSubmit}
+                loading={submitting}
+                icon={<Send className="size-4" />}
+                onClick={() => void handleSend()}
+              >
+                {submitting ? 'Confirm in your wallet…' : 'Send'}
+              </Button>
             )}
 
-            <Button
-              variant="primary"
-              className="w-full"
-              disabled={!canSubmit}
-              loading={submitting}
-              icon={<Send className="size-4" />}
-              onClick={handleSend}
-            >
-              {submitting ? 'Confirm in your wallet…' : 'Send'}
-            </Button>
+            {methodOverride === 'pool' && !accountTokenWarning && (
+              <p className="text-xs text-ink-400">Sending via the pool instead of an account.</p>
+            )}
 
             {result && (
               <TxResult
@@ -190,9 +259,10 @@ export function SendPage() {
               Generate a random ephemeral key and combine it with the meta-address to compute a
               one-time stealth address only the recipient can spend from.
             </Step>
-            <Step n={3} label="Deposit">
-              Send the funds into the pool contract against that stealth address, publishing the
-              ephemeral key so the recipient can find it.
+            <Step n={3} label="Deliver">
+              {effectiveMethod === 'account'
+                ? 'Fund a one-time classic Stellar account for the recipient.'
+                : 'Deposit the funds into the pool contract against that stealth address.'}
             </Step>
             <Step n={4} label="Scan">
               The recipient's view key detects the payment. Nobody else can tell it was for them.
@@ -200,13 +270,52 @@ export function SendPage() {
           </ol>
         </Panel>
 
-        <Panel eyebrow="Delivery" title="Pool method">
+        <Panel eyebrow="Delivery" title={effectiveMethod === 'account' ? 'Account method' : 'Pool method'}>
           <p className="text-[13px] leading-relaxed text-ink-400">
-            Value is held by the Soroban stealth-pool contract until claimed, so no new Stellar
-            account has to be created and funded per payment.
+            {effectiveMethod === 'account'
+              ? 'The recipient chose direct delivery: a fresh classic Stellar account is created and funded for this payment. Native XLM only, and account funding is paid by you.'
+              : 'Value is held by the Soroban stealth-pool contract until claimed, so no new Stellar account has to be created and funded per payment.'}
+          </p>
+          <p className="mt-3 text-xs leading-relaxed text-ink-500">
+            The recipient picks the method — you don't choose it, it's read from their published
+            preference (pool when unknown).
           </p>
         </Panel>
       </aside>
+    </div>
+  );
+}
+
+function AccountTokenWarning({
+  asset,
+  onUsePool,
+  onProceed,
+  submitting,
+}: {
+  asset: string;
+  onUsePool: () => void;
+  onProceed: () => void;
+  submitting: boolean;
+}) {
+  return (
+    <div className="border border-signal-wait/40 bg-signal-wait/5 p-4">
+      <div className="flex items-start gap-2.5 text-[13px] leading-relaxed text-signal-wait">
+        <TriangleAlert className="mt-0.5 size-4 shrink-0" />
+        <div>
+          <strong className="font-semibold">This recipient receives to an account.</strong> Sending{' '}
+          <span className="font-mono">{asset}</span> this way draws{' '}
+          <strong>~1.5 XLM</strong> from your balance to fund their one-time stealth account. That
+          XLM is spent — it is <strong>not</strong> returned to you.
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button variant="primary" onClick={onUsePool} disabled={submitting}>
+          Send via pool instead
+        </Button>
+        <Button variant="secondary" loading={submitting} onClick={onProceed}>
+          Continue with account (~1.5 XLM)
+        </Button>
+      </div>
     </div>
   );
 }
@@ -228,9 +337,11 @@ function Step({ n, label, children }: { n: number; label: string; children: Reac
 function ResolutionStatus({
   resolution,
   mode,
+  method,
 }: {
   resolution: ReturnType<typeof useRecipientResolver>;
   mode: SendMode;
+  method: ReceiveMethod;
 }) {
   if (resolution.state === 'idle' || resolution.state === 'invalid') return null;
 
@@ -250,6 +361,7 @@ function ResolutionStatus({
         <div className="min-w-0 text-[13px]">
           <div className="text-ink-100">
             {mode === 'public' ? 'Recipient is registered' : 'Meta-address accepted'}
+            <span className="ml-2 font-mono text-[11px] text-ink-400">via {method}</span>
           </div>
           <div className="mt-0.5 truncate font-mono text-xs text-ink-400">
             {truncateMeta(resolution.metaAddress)}
@@ -276,8 +388,7 @@ function ResolutionStatus({
           <div>
             <strong className="font-semibold">Not registered with Shade.</strong> This account has
             not published a meta-address, so a stealth address can't be derived for it. Ask them to
-            open Receive and publish theirs — or switch to the Meta-address tab if they sent you one
-            directly.
+            publish theirs — or switch to the Meta-address tab if they sent you one directly.
           </div>
         </div>
       </Notice>

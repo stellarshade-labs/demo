@@ -15,6 +15,11 @@ function required(key: string): string {
   return value.trim();
 }
 
+function optional(key: string, fallback: string): string {
+  const value = import.meta.env[key as keyof ImportMetaEnv] as string | undefined;
+  return value && value.trim() ? value.trim() : fallback;
+}
+
 const networkName = required('VITE_STELLAR_NETWORK');
 
 if (networkName !== 'testnet' && networkName !== 'mainnet') {
@@ -34,6 +39,8 @@ export const NETWORK = {
   horizonUrl: required('VITE_HORIZON_URL'),
   /** Account data-entry key that carries a published meta-address. */
   metaDataKey: required('VITE_META_DATA_KEY'),
+  /** Account data-entry key that carries the receiver's preferred delivery method. */
+  metaMethodKey: optional('VITE_META_METHOD_KEY', 'shade:method'),
 } as const;
 
 /** Block explorer link for a transaction hash. */

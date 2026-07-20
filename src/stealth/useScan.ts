@@ -33,7 +33,12 @@ function dedupe(existing: Payment[], incoming: Payment[]): Payment[] {
   return [...seen.values()];
 }
 
-export function useScan(address: string | null, keys: StealthKeys | null) {
+export function useScan(
+  address: string | null,
+  keys: StealthKeys | null,
+  opts?: { auto?: boolean },
+) {
+  const auto = opts?.auto ?? true;
   const [state, setState] = useState<ScanState>({
     payments: [],
     claimed: new Set(),
@@ -158,7 +163,9 @@ export function useScan(address: string | null, keys: StealthKeys | null) {
           lastSyncedAt: cached.updatedAt,
         }));
       }
-      if (!cancelled) void scan();
+      // Honour the auto-scan-on-open setting: still hydrate from cache, but
+      // only walk the ledger automatically when enabled.
+      if (!cancelled && auto) void scan();
     })();
 
     return () => {
