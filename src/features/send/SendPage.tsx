@@ -11,6 +11,7 @@ import type { ReceiveMethod } from '@/identity/identityStore';
 import { Panel, Well } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
+import { HelpTip } from '@/components/ui/HelpTip';
 import { Tabs } from '@/components/ui/Tabs';
 import { Notice, TxResult } from '@/components/ui/Status';
 import { useContacts, contactKindFor, type Contact } from '@/contacts/contactsStore';
@@ -273,6 +274,29 @@ export function SendPage() {
 
             <ResolutionStatus resolution={resolution} mode={sendMode} method={effectiveMethod} />
 
+            {resolution.state === 'resolved' && (
+              <div>
+                <div className="mb-2 flex items-center gap-1.5">
+                  <span className="label-eyebrow">Delivery method</span>
+                  <HelpTip label="Delivery method">
+                    How the funds reach the recipient. This starts from their preference, but you
+                    can change it.
+                    <br />
+                    <br />
+                    <strong>Pool:</strong> value sits in the stealth-pool contract until they claim —
+                    private, any asset, cheapest.
+                    <br />
+                    <strong>Account:</strong> a one-time classic account is funded for them — native
+                    XLM only, and sending a token this way costs you ~1.5 XLM.
+                  </HelpTip>
+                </div>
+                <MethodPicker value={effectiveMethod} onChange={(m) => setMethodOverride(m)} />
+                <p className="mt-1.5 text-xs text-ink-500">
+                  Starts from the recipient&apos;s preference — change it if you need to.
+                </p>
+              </div>
+            )}
+
             <Field
               label="Amount"
               placeholder="0.00"
@@ -325,10 +349,6 @@ export function SendPage() {
               </Button>
             )}
 
-            {methodOverride === 'pool' && !accountTokenWarning && (
-              <p className="text-xs text-ink-400">Sending via the pool instead of an account.</p>
-            )}
-
             {result && (
               <TxResult
                 status={result.status}
@@ -367,15 +387,47 @@ export function SendPage() {
         <Panel eyebrow="Delivery" title={effectiveMethod === 'account' ? 'Account method' : 'Pool method'}>
           <p className="text-[13px] leading-relaxed text-ink-400">
             {effectiveMethod === 'account'
-              ? 'The recipient chose direct delivery: a fresh classic Stellar account is created and funded for this payment. Native XLM only, and account funding is paid by you.'
+              ? 'Direct delivery: a fresh classic Stellar account is created and funded for this payment. Native XLM only, and account funding is paid by you.'
               : 'Value is held by the Soroban stealth-pool contract until claimed, so no new Stellar account has to be created and funded per payment.'}
           </p>
           <p className="mt-3 text-xs leading-relaxed text-ink-500">
-            The recipient picks the method — you don't choose it, it's read from their published
-            preference (pool when unknown).
+            Starts from the recipient&apos;s preference (pool when unknown), but you can change it on
+            the form.
           </p>
         </Panel>
       </aside>
+    </div>
+  );
+}
+
+function MethodPicker({
+  value,
+  onChange,
+}: {
+  value: ReceiveMethod;
+  onChange: (value: ReceiveMethod) => void;
+}) {
+  const options: { value: ReceiveMethod; label: string }[] = [
+    { value: 'pool', label: 'Pool' },
+    { value: 'account', label: 'Account' },
+  ];
+  return (
+    <div className="inline-flex border border-ink-700">
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`inline-flex items-center px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              active ? 'bg-copper-500 text-onaccent' : 'text-ink-400 hover:text-ink-100'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
