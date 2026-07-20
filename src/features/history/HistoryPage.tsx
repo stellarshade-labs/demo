@@ -110,10 +110,10 @@ export function HistoryPage() {
   const hasFilter = kind !== 'all' || status !== 'all' || query.trim() !== '';
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink-50">Activity</h1>
+          <h1 className="text-lg font-bold tracking-tight text-ink-50 sm:text-xl">Activity</h1>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-400">
             Everything this browser has done. Kept locally — it survives a refresh but never leaves
             your machine.
@@ -152,8 +152,8 @@ export function HistoryPage() {
             />
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-5 py-3">
-                <div className="relative flex-1 min-w-[160px]">
+              <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-4 py-3 sm:px-5">
+                <div className="relative min-w-[160px] basis-full sm:flex-1 sm:basis-auto">
                   <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-500" />
                   <input
                     type="search"
@@ -216,7 +216,7 @@ function FilterSelect({
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 border border-ink-700 bg-ink-900 px-2 text-[13px] text-ink-100 focus:border-copper-500 focus:outline-none"
+      className="h-9 min-w-0 flex-1 border border-ink-700 bg-ink-900 px-2 text-[13px] text-ink-100 focus:border-copper-500 focus:outline-none sm:flex-none"
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -242,7 +242,7 @@ function TxRow({ tx, onOpen }: { tx: TxRecord; onOpen: (tx: TxRecord) => void })
           onOpen(tx);
         }
       }}
-      className="flex cursor-pointer items-start gap-4 px-5 py-4 transition-colors hover:bg-ink-800 focus:bg-ink-800 focus:outline-none"
+      className="flex cursor-pointer items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800 focus:bg-ink-800 focus:outline-none sm:gap-4 sm:px-5"
     >
       <Icon className="mt-0.5 size-4 shrink-0 text-ink-500" />
 
@@ -340,7 +340,7 @@ function AnnouncementFeed() {
       ) : (
         <ul className="max-h-[420px] divide-y divide-ink-700 overflow-y-auto">
           {records.map((record) => (
-            <li key={record.hash} className="flex items-center gap-3 px-5 py-2.5">
+            <li key={record.hash} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
               <StatusDot state={record.successful ? 'ok' : 'bad'} />
               <a
                 href={explorerTxUrl(record.hash)}

@@ -34,9 +34,15 @@ export interface BalanceState {
 const horizon = new Horizon.Server(NETWORK.horizonUrl);
 
 function isNotFound(error: unknown): boolean {
-  const status = (error as { response?: { status?: number }; status?: number } | null)?.response
-    ?.status;
-  return status === 404 || (error as { status?: number } | null)?.status === 404;
+  const e = error as
+    | { response?: { status?: number }; status?: number; constructor?: { name?: string } }
+    | null;
+  return (
+    e?.response?.status === 404 ||
+    e?.status === 404 ||
+    // The Stellar SDK doesn't set `.name`, so fall back to the class name.
+    e?.constructor?.name === 'NotFoundError'
+  );
 }
 
 export function useBalance(address: string | null): BalanceState {
@@ -60,38 +66,52 @@ export function useBalance(address: string | null): BalanceState {
     requestFor.current = address;
     setLoading(true);
     setError(null);
-    try {
-      const account = await horizon.loadAccount(address);
-      if (requestFor.current !== address) return;
-      const nativeLine = account.balances.find((b) => b.asset_type === 'native');
-      setNative(nativeLine ? Number(nativeLine.balance) : 0);
-      // Every non-native line, derived from the same already-loaded balances.
-      setAssets(
-        account.balances
-          .filter((b) => b.asset_type !== 'native')
-          .map((b) => {
-            const line = b as { asset_code?: string; asset_issuer?: string; balance: string };
-            return {
-              code: line.asset_code ?? '',
-              issuer: line.asset_issuer,
-              balance: Number(line.balance),
-            };
-          })
-          .filter((a) => a.balance > 0),
-      );
-      setFunded(true);
-    } catch (err) {
-      if (requestFor.current !== address) return;
-      if (isNotFound(err)) {
-        setNative(0);
-        setAssets([]);
-        setFunded(false);
-      } else {
-        setError(toUserMessage(err));
+
+    // A fresh tab's very first Horizon call can fail before the connection is
+    // warm (DNS/TLS), which used to leave the balance stuck on a bare "—" with
+    // no way to recover but a manual action (funding). Retry transient failures
+    // a few times; a genuine 404 (unfunded account) resolves immediately to 0.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const account = await horizon.loadAccount(address);
+        if (requestFor.current !== address) return;
+        const nativeLine = account.balances.find((b) => b.asset_type === 'native');
+        setNative(nativeLine ? Number(nativeLine.balance) : 0);
+        // Every non-native line, derived from the same already-loaded balances.
+        setAssets(
+          account.balances
+            .filter((b) => b.asset_type !== 'native')
+            .map((b) => {
+              const line = b as { asset_code?: string; asset_issuer?: string; balance: string };
+              return {
+                code: line.asset_code ?? '',
+                issuer: line.asset_issuer,
+                balance: Number(line.balance),
+              };
+            })
+            .filter((a) => a.balance > 0),
+        );
+        setFunded(true);
+        setError(null);
+        break;
+      } catch (err) {
+        if (requestFor.current !== address) return;
+        if (isNotFound(err)) {
+          setNative(0);
+          setAssets([]);
+          setFunded(false);
+          setError(null);
+          break;
+        }
+        if (attempt >= 3) {
+          setError(toUserMessage(err));
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, attempt * 700));
+        if (requestFor.current !== address) return;
       }
-    } finally {
-      if (requestFor.current === address) setLoading(false);
     }
+    if (requestFor.current === address) setLoading(false);
   }, [address]);
 
   useEffect(() => {

@@ -293,9 +293,9 @@ export function ClaimList() {
               return (
                 <li
                   key={`${addr}:${payment.token}`}
-                  className="px-5 py-4 transition-colors hover:bg-ink-800/40"
+                  className="px-4 py-4 transition-colors hover:bg-ink-800/40 sm:px-5"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-3 sm:gap-4">
                     <ShieldCheck className="size-4 shrink-0 text-copper-500" />
                     <div className="min-w-0 flex-1">
                       <div className="font-mono text-sm font-medium text-ink-50">

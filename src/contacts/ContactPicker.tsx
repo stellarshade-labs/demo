@@ -36,7 +36,7 @@ export function ContactPicker({
           <Portal>
             <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
           </Portal>
-          <div className="absolute right-0 z-20 mt-1.5 w-72 border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
+          <div className="absolute right-0 z-20 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
             {contacts.length === 0 ? (
               <div className="flex flex-col items-center gap-1.5 px-4 py-6 text-center">
                 <Users className="size-4 text-ink-600" />

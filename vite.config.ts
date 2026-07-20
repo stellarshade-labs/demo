@@ -55,4 +55,11 @@ export default defineConfig({
   optimizeDeps: {
     include: ['stellar-shade', '@stellar/stellar-sdk'],
   },
+  server: {
+    // Allow the dev server to be reached over Tailscale MagicDNS (*.ts.net) via
+    // `tailscale serve`. Passkeys (WebAuthn) and Web Crypto need a real HTTPS
+    // domain — a bare LAN IP fails WebAuthn's "effective domain" check — so
+    // on-device testing goes through the tailnet hostname, not the LAN IP.
+    allowedHosts: ['.ts.net'],
+  },
 });

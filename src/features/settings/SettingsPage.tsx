@@ -77,7 +77,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-xl font-bold tracking-tight text-ink-50">Settings</h1>
+        <h1 className="text-lg font-bold tracking-tight text-ink-50 sm:text-xl">Settings</h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-400">
           How you receive, how claims are submitted, and how your identity is stored on this device.
         </p>
@@ -105,7 +105,7 @@ export function SettingsPage() {
               </>
             }
           >
-            <div className="flex flex-col items-end gap-1.5">
+            <div className="flex flex-col items-start gap-1.5 sm:items-end">
               <MethodSegment
                 value={settings.receiveMethod}
                 onChange={(method) => setSettings({ receiveMethod: method })}
@@ -574,8 +574,10 @@ function ViewExportControls({ identity }: { identity: ReturnType<typeof useIdent
         </Button>
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-            <QRCode value={exportString!} size={148} />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+            <div className="shrink-0 self-center sm:self-start">
+              <QRCode value={exportString!} size={148} />
+            </div>
             <div className="min-w-0 flex-1 space-y-2">
               <div className="label-eyebrow">View key</div>
               <CopyField value={exportString!} className="!text-[11px]" />
@@ -834,12 +836,12 @@ function Secret({ label, value }: { label: string; value: string }) {
 
 function Row({ label, help, children }: { label: string; help: ReactNode; children: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4">
-      <div className="min-w-0 flex items-center gap-1.5">
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+      <div className="flex min-w-0 items-center gap-1.5">
         <span className="text-sm text-ink-100">{label}</span>
         <HelpTip label={label}>{help}</HelpTip>
       </div>
-      <div className="shrink-0">{children}</div>
+      <div className="sm:shrink-0">{children}</div>
     </div>
   );
 }

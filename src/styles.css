@@ -105,6 +105,20 @@ html[data-theme='light'] {
   }
 }
 
+/*
+ * iOS Safari auto-zooms the page whenever a focused control's font-size is under
+ * 16px — which every field here is (13px for density). Force 16px on small
+ * screens so tapping a field never zooms; the denser desktop sizes still apply
+ * from the `sm` breakpoint up. `!important` beats the Tailwind text-size utility.
+ */
+@media (max-width: 639.98px) {
+  input:not([type='checkbox']):not([type='radio']),
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 @layer components {
   /* Small-caps section label used on every panel header. */
   .label-eyebrow {

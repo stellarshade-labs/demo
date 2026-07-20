@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   Check,
@@ -9,12 +9,14 @@ import {
   Inbox,
   KeyRound,
   Lock,
+  Menu,
   Plus,
   Send,
   Settings,
   SlidersHorizontal,
   Sparkles,
   Wallet,
+  X,
 } from 'lucide-react';
 import { NETWORK } from '@/config/network';
 import { useServiceHealth } from '@/lib/useServiceHealth';
@@ -25,6 +27,7 @@ import type { PublicIdentity } from '@/identity/identityStore';
 import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
 import { truncateMeta } from '@/lib/format';
 import { ConnectButton } from '@/components/wallet/ConnectButton';
+import { Portal } from '@/components/ui/Portal';
 import { StatusDot } from '@/components/ui/Status';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 import { ShadeMark } from './ShadeMark';
@@ -41,67 +44,67 @@ export function AppShell({ children }: { children: ReactNode }) {
   const health = useServiceHealth();
   const { networkMismatch } = useWallet();
   const { lock } = useIdentity();
+  const location = useLocation();
+  const [navOpen, setNavOpen] = useState(false);
+
+  // The drawer is a navigation surface: any route change means it has done its
+  // job and should get out of the way.
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  // While the mobile drawer is open, lock the page behind it and let Escape close
+  // it — the same overlay conventions the modals use.
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setNavOpen(false);
+    window.addEventListener('keydown', onKey);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [navOpen]);
+
+  // The guided tour highlights nav items that live inside the drawer on mobile;
+  // let it pop the drawer open (and shut) for those steps.
+  useEffect(() => {
+    const open = () => setNavOpen(true);
+    const close = () => setNavOpen(false);
+    window.addEventListener('shade:open-nav', open);
+    window.addEventListener('shade:close-nav', close);
+    return () => {
+      window.removeEventListener('shade:open-nav', open);
+      window.removeEventListener('shade:close-nav', close);
+    };
+  }, []);
 
   return (
     <div className="flex min-h-screen bg-ink-950">
-      {/* Left rail — persistent, never collapses into a hamburger on desktop. */}
-      <aside className="sticky top-0 flex h-screen w-[188px] shrink-0 flex-col border-r border-ink-700 bg-ink-950 max-lg:w-[60px]">
-        <div className="flex h-14 items-center gap-2.5 border-b border-ink-700 px-4">
-          <ShadeMark className="size-5 shrink-0 text-copper-500" />
-          <span className="text-[15px] font-bold tracking-tight text-ink-50 max-lg:hidden">
-            Shade
-          </span>
-        </div>
-
-        <nav className="flex flex-col py-3">
-          {NAV.map(({ to, label, Icon, tour }) => (
-            <NavLink
-              key={to}
-              to={to}
-              data-tour={tour}
-              className={({ isActive }) =>
-                `relative flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors max-lg:justify-center ${
-                  isActive
-                    ? 'text-ink-50 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:bg-copper-500'
-                    : 'text-ink-400 hover:text-ink-100'
-                }`
-              }
-            >
-              <Icon className="size-4 shrink-0" />
-              <span className="max-lg:hidden">{label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="mt-auto border-t border-ink-700 p-4 max-lg:hidden">
-          <div className="label-eyebrow mb-2.5">Services</div>
-          <ServiceRow
-            name="Relayer"
-            state={health.relayer}
-            href={NETWORK.relayerUrl}
-          />
-          <ServiceRow
-            name="Indexer"
-            state={health.indexer}
-            href={NETWORK.indexerUrl}
-            detail={
-              health.indexerLagSeconds !== null
-                ? `${Math.round(health.indexerLagSeconds)}s lag`
-                : undefined
-            }
-          />
-        </div>
+      {/* Desktop rail — persistent from lg up; below that it becomes the drawer. */}
+      <aside className="hidden w-[188px] shrink-0 border-r border-ink-700 bg-ink-950 lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col">
+        <RailContent health={health} />
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-4 border-b border-ink-700 bg-ink-950/95 px-6 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-3">
-            <NetworkBadge />
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-ink-700 bg-ink-950/95 px-4 backdrop-blur sm:gap-4 sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open menu"
+              aria-expanded={navOpen}
+              aria-controls="mobile-nav"
+              className="inline-flex size-9 shrink-0 items-center justify-center rounded-[3px] border border-ink-600 text-ink-300 transition-colors hover:border-ink-400 hover:text-ink-50 lg:hidden"
+            >
+              <Menu className="size-4" />
+            </button>
             <span className="truncate font-mono text-xs text-ink-500 max-md:hidden">
               {NETWORK.contractId}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <IdentitySwitcher />
             <ThemeToggle />
             <button
@@ -110,7 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               data-tour="lock"
               aria-label="Lock identity"
               title="Lock identity"
-              className="inline-flex size-8 items-center justify-center rounded-[3px] border border-ink-600 text-ink-300 transition-colors hover:border-ink-400 hover:text-ink-50"
+              className="inline-flex size-9 items-center justify-center rounded-[3px] border border-ink-600 text-ink-300 transition-colors hover:border-ink-400 hover:text-ink-50 sm:size-8"
             >
               <Lock className="size-4" />
             </button>
@@ -119,20 +122,114 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {networkMismatch && (
-          <div className="border-b border-signal-wait/30 bg-signal-wait/5 px-6 py-2.5 text-[13px] text-signal-wait">
+          <div className="border-b border-signal-wait/30 bg-signal-wait/5 px-4 py-2.5 text-[13px] text-signal-wait sm:px-6">
             Your wallet is on a different network than this app ({NETWORK.label}). Switch networks
             in your wallet before sending.
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-6 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
 
-        <footer className="border-t border-ink-700 px-6 py-4 text-xs text-ink-600">
+        <footer className="border-t border-ink-700 px-4 py-4 text-xs text-ink-600 sm:px-6">
           Demo build against Shade on {NETWORK.label}. The protocol's cryptography is pending
           external audit — do not use it with real value.
         </footer>
       </div>
+
+      {/* Mobile nav drawer — portaled to the body so the header's backdrop-blur
+          can't clamp its fixed positioning. Hidden entirely at lg. */}
+      <Portal>
+        <div id="mobile-nav" className="lg:hidden">
+          <div
+            onClick={() => setNavOpen(false)}
+            className={`fixed inset-0 z-40 bg-ink-950/80 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
+              navOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+          />
+          <aside
+            className={`fixed inset-y-0 left-0 z-50 flex w-64 max-w-[80vw] flex-col border-r border-ink-700 bg-ink-950 transition-transform duration-200 ease-out motion-reduce:transition-none ${
+              navOpen ? 'translate-x-0' : '-translate-x-full'
+            }`}
+          >
+            <RailContent
+              health={health}
+              onNavigate={() => setNavOpen(false)}
+              onClose={() => setNavOpen(false)}
+            />
+          </aside>
+        </div>
+      </Portal>
     </div>
+  );
+}
+
+/**
+ * The rail's contents — logo, primary nav, and service health — shared by the
+ * persistent desktop rail and the mobile drawer. `useServiceHealth` stays in the
+ * shell and is passed in so the two mounted copies don't each start a poll.
+ */
+function RailContent({
+  health,
+  onNavigate,
+  onClose,
+}: {
+  health: ReturnType<typeof useServiceHealth>;
+  onNavigate?: () => void;
+  onClose?: () => void;
+}) {
+  return (
+    <>
+      <div className="flex h-14 items-center gap-2.5 border-b border-ink-700 px-4">
+        <ShadeMark className="size-5 shrink-0 text-copper-500" />
+        <span className="text-[15px] font-bold tracking-tight text-ink-50">Shade</span>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close menu"
+            className="ml-auto inline-flex size-8 items-center justify-center rounded-[3px] text-ink-400 transition-colors hover:text-ink-50"
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
+      <nav className="flex flex-col py-3">
+        {NAV.map(({ to, label, Icon, tour }) => (
+          <NavLink
+            key={to}
+            to={to}
+            data-tour={tour}
+            onClick={onNavigate}
+            className={({ isActive }) =>
+              `relative flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors ${
+                isActive
+                  ? 'text-ink-50 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:bg-copper-500'
+                  : 'text-ink-400 hover:text-ink-100'
+              }`
+            }
+          >
+            <Icon className="size-4 shrink-0" />
+            <span>{label}</span>
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="mt-auto border-t border-ink-700 p-4">
+        <div className="label-eyebrow mb-2.5">Services</div>
+        <ServiceRow name="Relayer" state={health.relayer} href={NETWORK.relayerUrl} />
+        <ServiceRow
+          name="Indexer"
+          state={health.indexer}
+          href={NETWORK.indexerUrl}
+          detail={
+            health.indexerLagSeconds !== null
+              ? `${Math.round(health.indexerLagSeconds)}s lag`
+              : undefined
+          }
+        />
+      </div>
+    </>
   );
 }
 
@@ -196,7 +293,7 @@ function IdentitySwitcher() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-40 mt-1.5 w-64 border border-ink-700 bg-ink-900 py-1 shadow-lg"
+          className="absolute right-0 top-full z-40 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-900 py-1 shadow-lg"
         >
           <div className="label-eyebrow px-3 py-1.5">Identities</div>
           <div className="max-h-64 overflow-y-auto">
@@ -287,20 +384,5 @@ function ServiceRow({
       {detail && <span className="font-mono text-[10px] text-ink-600">{detail}</span>}
       <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
     </a>
-  );
-}
-
-export function NetworkBadge() {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 border px-2 py-1 text-[11px] font-semibold uppercase tracking-wider ${
-        NETWORK.isTestnet
-          ? 'border-copper-600/40 bg-copper-600/10 text-copper-300'
-          : 'border-signal-ok/40 bg-signal-ok/10 text-signal-ok'
-      }`}
-    >
-      <StatusDot state={NETWORK.isTestnet ? 'wait' : 'ok'} />
-      {NETWORK.label}
-    </span>
   );
 }

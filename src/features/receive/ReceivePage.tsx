@@ -17,7 +17,7 @@ import { CopyField } from '@/components/ui/CopyField';
 import { ShareButton } from '@/components/ui/ShareButton';
 import { Field } from '@/components/ui/Field';
 import { QRCode } from '@/components/ui/QRCode';
-import { Notice, TxResult } from '@/components/ui/Status';
+import { Notice, Skeleton, TxResult } from '@/components/ui/Status';
 import { ClaimList } from './ClaimList';
 
 const SOURCE_META = {
@@ -92,10 +92,10 @@ export function ReceivePage() {
     : '';
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink-50">Receive</h1>
+          <h1 className="text-lg font-bold tracking-tight text-ink-50 sm:text-xl">Receive</h1>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-400">
             Share your meta-address, or publish it so anyone can pay you by your public address.
             Payments land at one-time addresses only you can find.
@@ -107,8 +107,22 @@ export function ReceivePage() {
             <div>
               <div className="label-eyebrow mb-1.5">Payout balance</div>
               <div className="font-mono text-2xl font-semibold text-ink-50">
-                {balance.native === null ? '—' : formatAmount(balance.native)}{' '}
-                <span className="text-base font-normal text-ink-400">XLM</span>
+                {balance.native !== null ? (
+                  <>
+                    {formatAmount(balance.native)}{' '}
+                    <span className="text-base font-normal text-ink-400">XLM</span>
+                  </>
+                ) : balance.error ? (
+                  <button
+                    type="button"
+                    onClick={() => void balance.reload()}
+                    className="text-sm font-normal text-signal-bad underline decoration-signal-bad/40 underline-offset-2 transition-colors hover:text-signal-bad/80"
+                  >
+                    Couldn&apos;t load balance — retry
+                  </button>
+                ) : (
+                  <Skeleton className="h-7 w-28" />
+                )}
               </div>
               {balance.assets.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-400">

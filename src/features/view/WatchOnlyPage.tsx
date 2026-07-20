@@ -141,7 +141,7 @@ export function WatchOnlyPage() {
                 {payments.map((payment) => (
                   <li
                     key={`${payment.stealthAddress}:${payment.token}`}
-                    className="flex items-center gap-4 px-5 py-4"
+                    className="flex items-center gap-3 px-4 py-4 sm:gap-4 sm:px-5"
                   >
                     <Eye className="size-4 shrink-0 text-ink-500" />
                     <div className="min-w-0 flex-1">
@@ -154,7 +154,7 @@ export function WatchOnlyPage() {
                       </div>
                     </div>
                     <span
-                      className="cursor-not-allowed border border-ink-700 px-2.5 py-1 text-[11px] font-medium text-ink-600"
+                      className="shrink-0 cursor-not-allowed whitespace-nowrap border border-ink-700 px-2.5 py-1 text-[11px] font-medium text-ink-600"
                       title="Watch-only mode has no spend key, so claiming is disabled."
                     >
                       Claim disabled

@@ -180,10 +180,10 @@ export function SendPage() {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-5">
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-ink-50">Send privately</h1>
+          <h1 className="text-lg font-bold tracking-tight text-ink-50 sm:text-xl">Send privately</h1>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-400">
             Funds go to a fresh one-time address derived for this transfer. Nothing on-chain links
             it back to the recipient's account.

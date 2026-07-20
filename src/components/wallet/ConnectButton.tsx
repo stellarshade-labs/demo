@@ -31,8 +31,9 @@ export function ConnectButton() {
           icon={<Wallet className="size-3.5" />}
           loading={status === 'connecting'}
           onClick={() => setModalOpen(true)}
+          aria-label="Connect wallet"
         >
-          Connect wallet
+          <span className="max-[400px]:hidden">Connect wallet</span>
         </Button>
         <WalletModal open={modalOpen} onClose={() => setModalOpen(false)} />
       </>
@@ -47,7 +48,9 @@ export function ConnectButton() {
         className="flex h-8 items-center gap-2 border border-ink-700 bg-ink-850 px-2.5 text-[13px] transition-colors hover:border-ink-600"
       >
         {connector && <connector.Icon className="size-3.5 text-copper-400" />}
-        <span className="font-mono tracking-tight text-ink-100">{truncate(address)}</span>
+        <span className="font-mono tracking-tight text-ink-100 max-[420px]:hidden">
+          {truncate(address)}
+        </span>
         <ChevronDown className="size-3.5 text-ink-500" />
       </button>
 
@@ -58,7 +61,7 @@ export function ConnectButton() {
           <Portal>
             <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
           </Portal>
-          <div className="absolute right-0 z-20 mt-1.5 w-72 border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
+          <div className="absolute right-0 z-20 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
             <div className="border-b border-ink-700 px-4 py-3">
               <div className="label-eyebrow mb-1.5">{connector?.name ?? 'Wallet'}</div>
               <div className="flex items-center justify-between gap-2">

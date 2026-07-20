@@ -56,7 +56,7 @@ export function CopyField({
       title="Click to copy"
       className={`group flex w-full items-center justify-between gap-3 border border-ink-700 bg-ink-900 px-3 py-2.5 text-left transition-colors hover:border-ink-600 ${className}`}
     >
-      <span className="truncate font-mono text-[13px] tracking-tight text-ink-100">
+      <span className="min-w-0 truncate font-mono text-[13px] tracking-tight text-ink-100">
         {display ?? value}
       </span>
       {copied ? (
