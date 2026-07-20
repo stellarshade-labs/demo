@@ -1,14 +1,9 @@
 import type { WalletConnector } from '../types';
 import { freighterConnector } from './freighter';
-import { albedoConnector } from './albedo';
-import { xbullConnector } from './xbull';
+import { walletConnectConnector } from './walletconnect';
 
-/** Ordered by how likely a Stellar dapp user is to have them. */
-export const connectors: WalletConnector[] = [
-  freighterConnector,
-  xbullConnector,
-  albedoConnector,
-];
+/** Ordered by priority: Freighter (extension) first, WalletConnect (mobile/QR) second. */
+export const connectors: WalletConnector[] = [freighterConnector, walletConnectConnector];
 
 export function connectorById(id: string | null | undefined): WalletConnector | undefined {
   if (!id) return undefined;

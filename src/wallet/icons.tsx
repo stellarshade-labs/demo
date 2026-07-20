@@ -51,3 +51,12 @@ export function XBullMark({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function WalletConnectMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <circle cx="8" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.3" />
+      <circle cx="16" cy="12" r="4.5" stroke="currentColor" strokeWidth="1.3" />
+    </svg>
+  );
+}

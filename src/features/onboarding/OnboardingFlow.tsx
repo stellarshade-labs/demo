@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowRight,
   Check,
@@ -30,15 +30,33 @@ type Step = 'welcome' | 'create' | 'passphrase' | 'backup' | 'publish';
 const STEPS: Step[] = ['welcome', 'create', 'passphrase', 'backup', 'publish'];
 const MIN_PASSPHRASE = 8;
 
+// Mobile wallets deep-link away from the browser mid-onboarding; iOS may reload
+// the page on return, wiping React state. Persisting our position lets the user
+// resume at the create step instead of the welcome screen. Later steps depend on
+// the in-memory draft (secret keys we never persist), so 'create' is as far as a
+// reload can restore.
+const RESUME_KEY = 'shade:onboarding-resume';
+const MODE_KEY = 'shade:onboarding-mode';
+
 export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const identity = useIdentity();
-  const [step, setStep] = useState<Step>('welcome');
+  const [step, setStep] = useState<Step>(() =>
+    sessionStorage.getItem(RESUME_KEY) ? 'create' : 'welcome',
+  );
   const [passphrase, setPassphrase] = useState('');
   const [publishPref, setPublishPref] = useState(false);
   const [finishing, setFinishing] = useState(false);
   // A restored identity (mnemonic the user already has) doesn't need the backup
   // step — they're not seeing a new phrase, so we skip straight to publish.
   const [imported, setImported] = useState(false);
+
+  useEffect(() => {
+    if (step === 'welcome') {
+      sessionStorage.removeItem(RESUME_KEY);
+    } else {
+      sessionStorage.setItem(RESUME_KEY, '1');
+    }
+  }, [step]);
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
@@ -108,6 +126,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
               setFinishing(true);
               try {
                 await identity.finalize(passphrase, publishPref);
+                sessionStorage.removeItem(RESUME_KEY);
                 onComplete();
               } finally {
                 setFinishing(false);
@@ -153,7 +172,19 @@ export function CreateStep({
   /** `imported` is true only when restoring a phrase the user already had. */
   onCreated: (imported: boolean) => void;
 }) {
-  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic' | 'import'>('choose');
+  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic' | 'import'>(() =>
+    sessionStorage.getItem(MODE_KEY) === 'wallet' ? 'wallet' : 'choose',
+  );
+
+  useEffect(() => {
+    // Only the wallet path deep-links away (and risks a reload); the other
+    // modes never leave the page, so 'wallet' is the only mode worth resuming.
+    if (mode === 'wallet') {
+      sessionStorage.setItem(MODE_KEY, 'wallet');
+    } else {
+      sessionStorage.removeItem(MODE_KEY);
+    }
+  }, [mode]);
 
   if (mode === 'wallet') {
     return <WalletCreate identity={identity} onBack={() => setMode('choose')} onCreated={onCreated} />;
@@ -564,7 +595,7 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
                 {phraseHidden ? 'Show' : 'Hide'}
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {words.map((word, i) => (
                 <div
                   key={i}
