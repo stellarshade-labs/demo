@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { AtSign, Check, KeyRound, Loader2, Send, ShieldQuestion, TriangleAlert, UserX } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { AtSign, BookmarkPlus, Check, KeyRound, Loader2, Send, ShieldQuestion, TriangleAlert, UserX, X } from 'lucide-react';
 import { stealthClient, DEFAULT_METHOD } from '@/lib/shade';
 import { toUserMessage } from '@/lib/errors';
-import { truncateMeta } from '@/lib/format';
+import { looksLikeMetaAddress, looksLikeStellarAddress, truncateMeta } from '@/lib/format';
+import { parsePayParams, modeForRecipient } from '@/lib/paylink';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useSession } from '@/store/session';
 import type { ReceiveMethod } from '@/identity/identityStore';
@@ -11,6 +13,8 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Tabs } from '@/components/ui/Tabs';
 import { Notice, TxResult } from '@/components/ui/Status';
+import { useContacts, contactKindFor, type Contact } from '@/contacts/contactsStore';
+import { ContactPicker } from '@/contacts/ContactPicker';
 import { useRecipientResolver, type SendMode } from './useRecipientResolver';
 
 function isTokenAsset(asset: string): boolean {
@@ -25,17 +29,65 @@ export function SendPage() {
   const addTx = useSession((s) => s.addTx);
   const updateTx = useSession((s) => s.updateTx);
 
+  const contacts = useContacts((s) => s.contacts);
+  const addContact = useContacts((s) => s.addContact);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [asset, setAsset] = useState('');
   const [methodOverride, setMethodOverride] = useState<ReceiveMethod | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [prefilled, setPrefilled] = useState(false);
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
   >(null);
 
+  // Pay-link prefill: apply `?to=…&amount=…&asset=…` once on mount, then strip
+  // the params so a later refresh doesn't re-lock the form or fight edits.
+  const prefillApplied = useRef(false);
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    prefillApplied.current = true;
+    const params = parsePayParams(searchParams);
+    if (!params) return;
+    setSendMode(modeForRecipient(params.to));
+    setRecipient(params.to);
+    if (params.amount) setAmount(params.amount);
+    if (params.asset) setAsset(params.asset);
+    setMethodOverride(null);
+    setPrefilled(true);
+    setSearchParams({}, { replace: true });
+    // Run once on mount only; deliberately ignore later param/setter changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const resolution = useRecipientResolver(recipient, sendMode);
   const connected = status === 'connected' && Boolean(address);
+
+  const trimmedRecipient = recipient.trim();
+  const recipientValidAddress =
+    looksLikeStellarAddress(trimmedRecipient) || looksLikeMetaAddress(trimmedRecipient);
+  const alreadySaved = contacts.some((c) => c.address === trimmedRecipient);
+  const canSaveRecipient = recipientValidAddress && !alreadySaved;
+
+  const handlePickContact = (contact: Contact) => {
+    setSendMode(contact.kind);
+    setRecipient(contact.address);
+    setMethodOverride(null);
+    setResult(null);
+  };
+
+  const handleSaveRecipient = () => {
+    const label = window.prompt('Save this recipient as…', '');
+    if (label === null) return;
+    addContact({
+      label: label.trim(),
+      address: trimmedRecipient,
+      kind: contactKindFor(trimmedRecipient),
+    });
+  };
 
   const parsedAmount = Number.parseFloat(amount);
   const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
@@ -73,6 +125,7 @@ export function SendPage() {
     setSendMode(mode);
     resetForm();
     setResult(null);
+    setPrefilled(false);
   };
 
   const handleSend = async (method: ReceiveMethod = effectiveMethod) => {
@@ -145,37 +198,76 @@ export function SendPage() {
           />
 
           <div className="space-y-5 p-5" data-tour="send-form">
-            {sendMode === 'public' ? (
-              <Field
-                label="Recipient account"
-                placeholder="GABC…"
-                mono
-                autoComplete="off"
-                spellCheck={false}
-                value={recipient}
-                onChange={(e) => {
-                  setRecipient(e.target.value);
-                  setMethodOverride(null);
-                }}
-                error={resolution.state === 'invalid' ? resolution.message : null}
-                hint="We look up the meta-address this account published on-chain."
-              />
-            ) : (
-              <Field
-                label="Recipient meta-address"
-                placeholder="shade:stellar:…"
-                mono
-                autoComplete="off"
-                spellCheck={false}
-                value={recipient}
-                onChange={(e) => {
-                  setRecipient(e.target.value);
-                  setMethodOverride(null);
-                }}
-                error={resolution.state === 'invalid' ? resolution.message : null}
-                hint="Shared with you directly by the recipient — no lookup needed."
-              />
+            {prefilled && (
+              <div className="flex items-center justify-between gap-3 border border-copper-500/40 bg-copper-500/5 px-3 py-2 text-[13px] text-copper-300">
+                <span>Prefilled from a payment link.</span>
+                <button
+                  type="button"
+                  onClick={() => setPrefilled(false)}
+                  className="shrink-0 text-copper-400/70 hover:text-copper-300"
+                  aria-label="Dismiss"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
             )}
+
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="label-eyebrow">
+                  {sendMode === 'public' ? 'Recipient account' : 'Recipient meta-address'}
+                </span>
+                <div className="flex items-center gap-2">
+                  {canSaveRecipient && (
+                    <button
+                      type="button"
+                      onClick={handleSaveRecipient}
+                      className="flex h-8 items-center gap-1.5 border border-ink-700 bg-ink-850 px-2.5 text-[13px] text-ink-300 transition-colors hover:border-ink-600 hover:text-ink-100"
+                    >
+                      <BookmarkPlus className="size-3.5 text-copper-400" />
+                      Save
+                    </button>
+                  )}
+                  <ContactPicker onPick={handlePickContact} />
+                </div>
+              </div>
+
+              {sendMode === 'public' ? (
+                <Field
+                  label="Recipient account"
+                  id="send-recipient"
+                  placeholder="GABC…"
+                  mono
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={recipient}
+                  onChange={(e) => {
+                    setRecipient(e.target.value);
+                    setMethodOverride(null);
+                  }}
+                  error={resolution.state === 'invalid' ? resolution.message : null}
+                  hint="We look up the meta-address this account published on-chain."
+                  className="[&>label]:sr-only"
+                />
+              ) : (
+                <Field
+                  label="Recipient meta-address"
+                  id="send-recipient"
+                  placeholder="shade:stellar:…"
+                  mono
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={recipient}
+                  onChange={(e) => {
+                    setRecipient(e.target.value);
+                    setMethodOverride(null);
+                  }}
+                  error={resolution.state === 'invalid' ? resolution.message : null}
+                  hint="Shared with you directly by the recipient — no lookup needed."
+                  className="[&>label]:sr-only"
+                />
+              )}
+            </div>
 
             <ResolutionStatus resolution={resolution} mode={sendMode} method={effectiveMethod} />
 
