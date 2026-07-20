@@ -35,6 +35,7 @@ export function usePublish() {
   const updateTx = useSession((s) => s.updateTx);
 
   const [publishState, setPublishState] = useState<PublishState>('unknown');
+  const [publishedMethod, setPublishedMethod] = useState<ReceiveMethod | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PublishResult | null>(null);
 
@@ -45,6 +46,7 @@ export function usePublish() {
     try {
       const outcome = await resolveMetaAddress(payoutAddress);
       setPublishState(outcome.status === 'found' ? 'published' : 'not-published');
+      setPublishedMethod(outcome.status === 'found' ? outcome.method : null);
     } catch {
       setPublishState('unknown');
     }
@@ -66,6 +68,7 @@ export function usePublish() {
       success: string,
       nextState: PublishState,
       pref: boolean,
+      nextMethod: ReceiveMethod | null,
     ) => {
       if (!payoutAddress) return;
       setBusy(true);
@@ -76,6 +79,7 @@ export function usePublish() {
         updateTx(txId, { status: 'success', txHash });
         setResult({ status: 'success', message: success, txHash });
         setPublishState(nextState);
+        setPublishedMethod(nextMethod);
         setPublishPref(pref);
       } catch (err) {
         const message = toUserMessage(err);
@@ -96,6 +100,7 @@ export function usePublish() {
         'Address published. Senders can now reach you by your public address.',
         'published',
         true,
+        receiveMethod,
       ),
     [run, payoutAddress, metaAddress, signerFor, receiveMethod],
   );
@@ -108,6 +113,7 @@ export function usePublish() {
         'Address removed. Your reserve is released.',
         'not-published',
         false,
+        null,
       ),
     [run, payoutAddress, signerFor],
   );
@@ -121,6 +127,7 @@ export function usePublish() {
       try {
         const { txHash } = await publishReceiveMethod(payoutAddress, method, signerFor());
         setResult({ status: 'success', message: `Senders will now use ${method}.`, txHash });
+        setPublishedMethod(method);
       } catch (err) {
         setResult({ status: 'error', message: toUserMessage(err) });
       } finally {
@@ -132,6 +139,7 @@ export function usePublish() {
 
   return {
     publishState,
+    publishedMethod,
     busy,
     result,
     setResult,

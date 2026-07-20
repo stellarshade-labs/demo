@@ -30,7 +30,7 @@ import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { useTour } from '@/features/tutorial/TourProvider';
 import { ContactsSettings } from '@/contacts/ContactsSettings';
 import { NotificationsSettings } from '@/notifications/NotificationsSettings';
-import { truncateMeta } from '@/lib/format';
+import { truncateMeta, looksLikeStellarAddress } from '@/lib/format';
 import { buildViewExport } from '@/lib/viewExport';
 import { isWebAuthnAvailable, isPlatformAuthenticatorAvailable } from '@/lib/webauthn';
 import { toUserMessage } from '@/lib/errors';
@@ -99,31 +99,61 @@ export function SettingsPage() {
                 <br />
                 <strong>Account:</strong> a one-time classic account is funded for you. Native XLM
                 only, and sending a <em>token</em> this way costs the sender ~1.5 XLM.
+                <br />
+                <br />
+                Governs payments sent to your public address; meta-address payments always use pool.
               </>
             }
           >
-            <MethodSegment
-              value={settings.receiveMethod}
-              onChange={(method) => setSettings({ receiveMethod: method })}
-            />
+            <div className="flex flex-col items-end gap-1.5">
+              <MethodSegment
+                value={settings.receiveMethod}
+                onChange={(method) => setSettings({ receiveMethod: method })}
+              />
+              {pub.publishState === 'published' &&
+                pub.publishedMethod !== null &&
+                settings.receiveMethod === pub.publishedMethod && (
+                  <span className="inline-flex items-center gap-1.5 border border-signal-ok/40 bg-signal-ok/5 px-2 py-0.5 text-[11px] font-medium text-signal-ok">
+                    <Check className="size-3" />
+                    On-chain: {pub.publishedMethod}
+                  </span>
+                )}
+              {pub.publishState !== 'published' && (
+                <span className="text-[11px] text-ink-500">
+                  Not in effect yet — this is written when you{' '}
+                  <Link
+                    to="/receive"
+                    className="text-copper-400 underline decoration-copper-500/40 underline-offset-2 hover:decoration-copper-500"
+                  >
+                    publish
+                  </Link>{' '}
+                  your address.
+                </span>
+              )}
+            </div>
           </Row>
 
-          {pub.publishState === 'published' && (
-            <div className="border border-ink-700 bg-ink-900 px-4 py-3 text-[13px] text-ink-400">
-              Your address is published. Push the method change on-chain so senders see it:
-              <div className="mt-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={pub.busy}
-                  disabled={!pub.canManage}
-                  onClick={() => void pub.updateMethod(settings.receiveMethod)}
-                >
-                  Update published method
-                </Button>
+          {pub.publishState === 'published' &&
+            pub.publishedMethod !== null &&
+            settings.receiveMethod !== pub.publishedMethod && (
+              <div className="border border-ink-700 bg-ink-900 px-4 py-3 text-[13px] text-ink-400">
+                On-chain you're set to <strong className="text-ink-100">{pub.publishedMethod}</strong>
+                , but you've selected{' '}
+                <strong className="text-ink-100">{settings.receiveMethod}</strong>. Push it on-chain
+                so senders see it:
+                <div className="mt-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={pub.busy}
+                    disabled={!pub.canManage}
+                    onClick={() => void pub.updateMethod(settings.receiveMethod)}
+                  >
+                    Update published method
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           <Row
             label="Publish my address"
@@ -192,6 +222,23 @@ export function SettingsPage() {
               onChange={(v) => setSettings({ autoScanOnOpen: v })}
             />
           </Row>
+
+          <div className="border-t border-ink-700 pt-5">
+            <Field
+              label="Default claim destination"
+              mono
+              value={settings.claimDestination}
+              placeholder={identity.payoutAddress ?? 'G…'}
+              onChange={(e) => setSettings({ claimDestination: e.target.value })}
+              error={
+                settings.claimDestination.trim() &&
+                !looksLikeStellarAddress(settings.claimDestination.trim())
+                  ? 'Enter a valid Stellar address starting with G, or leave empty.'
+                  : null
+              }
+              hint="Where claimed funds are swept by default. Leave empty to use your own account. You can still override this per payment on Receive."
+            />
+          </div>
         </div>
       </Panel>
 

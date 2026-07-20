@@ -4,13 +4,14 @@ import type { Payment } from 'stellar-shade';
 import { stealthClient } from '@/lib/shade';
 import { NETWORK } from '@/config/network';
 import { toUserMessage } from '@/lib/errors';
-import { assetLabel, formatAmount, timeAgo, truncate } from '@/lib/format';
+import { assetLabel, formatAmount, looksLikeStellarAddress, timeAgo, truncate } from '@/lib/format';
 import { useServiceHealth } from '@/lib/useServiceHealth';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useIdentity } from '@/identity/IdentityProvider';
 import { useIdentityStore } from '@/identity/identityStore';
 import { useSession } from '@/store/session';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { EmptyState, Notice, Skeleton, TxResult } from '@/components/ui/Status';
 import { useScanContext } from '@/stealth/ScanProvider';
 
@@ -27,6 +28,7 @@ export function ClaimList() {
   const { signTransaction } = useWallet();
   const { keys, payoutAddress, payoutSecret } = useIdentity();
   const useRelayerByDefault = useIdentityStore((s) => s.settings.useRelayerByDefault);
+  const claimDestination = useIdentityStore((s) => s.settings.claimDestination);
   const addTx = useSession((s) => s.addTx);
   const updateTx = useSession((s) => s.updateTx);
 
@@ -38,6 +40,10 @@ export function ClaimList() {
   const [confirmingAll, setConfirmingAll] = useState(false);
   const [progress, setProgress] = useState<ClaimAllProgress | null>(null);
   const [relayerOptIn, setRelayerOptIn] = useState(useRelayerByDefault);
+  // Per-payment "send to a different address" overrides, keyed by stealth
+  // address. The matching row's toggle-link reveals the input.
+  const [destOverrides, setDestOverrides] = useState<Record<string, string>>({});
+  const [showOverride, setShowOverride] = useState<Record<string, boolean>>({});
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
   >(null);
@@ -52,6 +58,25 @@ export function ClaimList() {
   const relayerAvailable = health.relayer === 'ok' && !health.relayerRequiresCredit;
   const useRelayer = relayerOptIn && relayerAvailable;
 
+  // Global default sweep destination: the configured claim destination, or the
+  // active identity's own payout address when it's blank.
+  const defaultDest = claimDestination.trim() || payoutAddress || '';
+
+  // Resolve the destination for one payment: a valid per-payment override wins,
+  // otherwise fall back to the global default. Invalid overrides fall through to
+  // `defaultDest` here; the row separately flags them and disables its button.
+  const resolveDest = (p: Payment): string => {
+    const raw = destOverrides[p.stealthAddress]?.trim();
+    return raw && looksLikeStellarAddress(raw) ? raw : defaultDest;
+  };
+
+  // Whether a row carries a non-empty but malformed override — used to block the
+  // row's own Claim and to skip it in Claim-all.
+  const overrideInvalid = (p: Payment): boolean => {
+    const raw = destOverrides[p.stealthAddress]?.trim();
+    return Boolean(raw) && !looksLikeStellarAddress(raw);
+  };
+
   const available = scan.payments.filter((p) => !scan.claimed.has(p.stealthAddress));
 
   // The single claim path, shared by the per-row button and "Claim all". Marks
@@ -60,17 +85,20 @@ export function ClaimList() {
   const claimOne = async (payment: Payment): Promise<boolean> => {
     if (!keys || !payoutAddress) return false;
 
+    // Where the funds land: a per-payment override, else the global default.
+    const dest = resolveDest(payment);
+
     const txId = addTx({
       kind: 'claim',
       status: 'pending',
       amount: payment.amount,
       asset: assetLabel(payment),
       stealthAddress: payment.stealthAddress,
-      counterparty: payoutAddress,
+      counterparty: dest,
     });
 
     try {
-      const receipt = await stealthClient.claim(payment, payoutAddress, {
+      const receipt = await stealthClient.claim(payment, dest, {
         keys,
         ...(walletFree
           ? // Self-custodied payout: sponsor via the relayer when we can, else
@@ -99,6 +127,9 @@ export function ClaimList() {
 
   const handleClaim = async (payment: Payment) => {
     if (!keys || !payoutAddress) return;
+    // A malformed override must be fixed first; the button is already disabled,
+    // this just guards the path.
+    if (overrideInvalid(payment)) return;
     setClaiming(payment.stealthAddress);
     setResult(null);
     try {
@@ -117,8 +148,9 @@ export function ClaimList() {
   const handleClaimAll = async () => {
     if (!keys || !payoutAddress) return;
     // Snapshot now: `available` recomputes as each claim marks its payment, and
-    // we want a stable batch to walk sequentially.
-    const batch = [...available];
+    // we want a stable batch to walk sequentially. Skip rows whose override is
+    // malformed — they'd resolve to the default, which isn't what the user typed.
+    const batch = available.filter((p) => !overrideInvalid(p));
     if (batch.length === 0) return;
 
     setConfirmingAll(false);
@@ -248,30 +280,97 @@ export function ClaimList() {
           <ul className="divide-y divide-ink-700">
             {available.map((payment) => {
               const busy = claiming === payment.stealthAddress;
+              const addr = payment.stealthAddress;
+              const overrideRaw = destOverrides[addr]?.trim() ?? '';
+              const invalid = overrideInvalid(payment);
+              const dest = resolveDest(payment);
+              const external = dest !== payoutAddress;
+              // Account-method token claims land in a claimable balance the
+              // destination must already hold a trustline for; pools don't.
+              const needsTrustline =
+                external && payment.method === 'account' && payment.token !== 'native';
+              const open = showOverride[addr] ?? false;
               return (
                 <li
-                  key={`${payment.stealthAddress}:${payment.token}`}
-                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-ink-800/40"
+                  key={`${addr}:${payment.token}`}
+                  className="px-5 py-4 transition-colors hover:bg-ink-800/40"
                 >
-                  <ShieldCheck className="size-4 shrink-0 text-copper-500" />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-mono text-sm font-medium text-ink-50">
-                      {formatAmount(payment.amount)}{' '}
-                      <span className="text-ink-400">{assetLabel(payment)}</span>
+                  <div className="flex items-center gap-4">
+                    <ShieldCheck className="size-4 shrink-0 text-copper-500" />
+                    <div className="min-w-0 flex-1">
+                      <div className="font-mono text-sm font-medium text-ink-50">
+                        {formatAmount(payment.amount)}{' '}
+                        <span className="text-ink-400">{assetLabel(payment)}</span>
+                      </div>
+                      <div className="mt-0.5 truncate font-mono text-xs text-ink-500">
+                        at {truncate(addr, 8, 6)}
+                      </div>
                     </div>
-                    <div className="mt-0.5 truncate font-mono text-xs text-ink-500">
-                      at {truncate(payment.stealthAddress, 8, 6)}
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      loading={busy}
+                      disabled={(busyAny && !busy) || invalid}
+                      onClick={() => handleClaim(payment)}
+                    >
+                      Claim
+                    </Button>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="primary"
-                    loading={busy}
-                    disabled={busyAny && !busy}
-                    onClick={() => handleClaim(payment)}
-                  >
-                    Claim
-                  </Button>
+
+                  <div className="mt-2 pl-8">
+                    <button
+                      type="button"
+                      className="text-xs text-ink-500 underline decoration-ink-700 underline-offset-2 transition-colors hover:text-copper-400"
+                      onClick={() =>
+                        setShowOverride((s) => ({ ...s, [addr]: !open }))
+                      }
+                    >
+                      {open ? 'Claim to my account' : 'Send to a different address'}
+                    </button>
+
+                    {open && (
+                      <div className="mt-2 space-y-2">
+                        <Field
+                          label="Destination address"
+                          mono
+                          placeholder="G…"
+                          value={destOverrides[addr] ?? ''}
+                          error={invalid ? 'Enter a valid Stellar G-address.' : undefined}
+                          onChange={(e) =>
+                            setDestOverrides((s) => ({ ...s, [addr]: e.target.value }))
+                          }
+                        />
+                        {external && !invalid && (
+                          <p className="text-xs leading-relaxed text-ink-500">
+                            Claiming to {truncate(dest, 8, 6)} sends these funds out of your own
+                            account.
+                          </p>
+                        )}
+                        {needsTrustline && !invalid && (
+                          <Notice tone="warn">
+                            The destination must already hold a trustline for{' '}
+                            {assetLabel(payment)}, or this claim will fail on-chain.
+                          </Notice>
+                        )}
+                      </div>
+                    )}
+
+                    {/* When the row is collapsed but the global default still
+                        points somewhere external, surface the caveats too. */}
+                    {!open && overrideRaw === '' && external && (
+                      <p className="mt-2 text-xs leading-relaxed text-ink-500">
+                        Claiming to {truncate(dest, 8, 6)} sends these funds out of your own account.
+                      </p>
+                    )}
+                    {!open && overrideRaw === '' && needsTrustline && (
+                      <div className="mt-2">
+                        <Notice tone="warn">
+                          The destination must already hold a trustline for {assetLabel(payment)}, or
+                          this claim will fail on-chain.
+                        </Notice>
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}

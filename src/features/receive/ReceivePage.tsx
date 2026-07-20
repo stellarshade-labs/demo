@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Dice5, Globe, KeyRound, RefreshCw, Sparkles, Trash2, Wallet } from 'lucide-react';
 import { NETWORK } from '@/config/network';
-import { formatAmount, truncate } from '@/lib/format';
+import { assetLabel, formatAmount, truncate } from '@/lib/format';
 import { buildPayLink } from '@/lib/paylink';
 import { COMMON_TOKENS, assetString, isCompleteAsset } from '@/lib/tokens';
 import { fundWithFriendbot } from '@/lib/friendbot';
@@ -14,6 +14,7 @@ import { useScanContext } from '@/stealth/ScanProvider';
 import { Panel, Well } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { CopyField } from '@/components/ui/CopyField';
+import { ShareButton } from '@/components/ui/ShareButton';
 import { Field } from '@/components/ui/Field';
 import { QRCode } from '@/components/ui/QRCode';
 import { Notice, TxResult } from '@/components/ui/Status';
@@ -50,14 +51,17 @@ export function ReceivePage() {
 
   const sourceMeta = source ? SOURCE_META[source] : null;
 
-  // Total value still waiting to be claimed, across every detected payment.
-  const totalClaimable = useMemo(
-    () =>
-      scan.payments
-        .filter((p) => !scan.claimed.has(p.stealthAddress))
-        .reduce((sum, p) => sum + p.amount, 0),
-    [scan.payments, scan.claimed],
-  );
+  // Value still waiting to be claimed, grouped per asset — summing across
+  // assets would be meaningless (1 XLM + 1 USDC ≠ 2 of anything).
+  const claimableByAsset = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const p of scan.payments) {
+      if (scan.claimed.has(p.stealthAddress)) continue;
+      const label = assetLabel(p);
+      totals.set(label, (totals.get(label) ?? 0) + p.amount);
+    }
+    return [...totals.entries()].map(([label, amount]) => ({ label, amount }));
+  }, [scan.payments, scan.claimed]);
 
   // Offer a faucet only on testnet, and only once we know the account is unfunded.
   const canFund = NETWORK.isTestnet && !balance.funded && !balance.loading && !!payoutAddress;
@@ -105,15 +109,33 @@ export function ReceivePage() {
                 {balance.native === null ? '—' : formatAmount(balance.native)}{' '}
                 <span className="text-base font-normal text-ink-400">XLM</span>
               </div>
+              {balance.assets.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 font-mono text-xs text-ink-400">
+                  {balance.assets.map((a) => (
+                    <span key={`${a.code}:${a.issuer ?? ''}`}>
+                      {formatAmount(a.balance)} {a.code}
+                    </span>
+                  ))}
+                </div>
+              )}
               {!balance.funded && !balance.loading && (
                 <p className="mt-1 text-xs text-ink-500">Account not yet funded on-chain.</p>
               )}
             </div>
             <div className="text-right">
               <div className="label-eyebrow mb-1.5">Claimable</div>
-              <div className="font-mono text-2xl font-semibold text-copper-300">
-                {formatAmount(totalClaimable)}
-              </div>
+              {claimableByAsset.length === 0 ? (
+                <div className="font-mono text-2xl font-semibold text-copper-300">—</div>
+              ) : (
+                <div className="flex flex-col items-end gap-0.5 font-mono text-copper-300">
+                  {claimableByAsset.map(({ label, amount }) => (
+                    <div key={label} className="text-2xl font-semibold leading-tight">
+                      {formatAmount(amount)}{' '}
+                      <span className="text-base font-normal text-copper-400/80">{label}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
               <p className="mt-1 text-xs text-ink-500">across detected payments</p>
             </div>
           </div>
@@ -309,6 +331,11 @@ export function ReceivePage() {
               <div>
                 <div className="label-eyebrow mb-2">Pay link</div>
                 <CopyField value={payLink} />
+                {payLink && (
+                  <div className="mt-2">
+                    <ShareButton value={payLink} title="Pay me via Shade" />
+                  </div>
+                )}
               </div>
             </div>
           </div>

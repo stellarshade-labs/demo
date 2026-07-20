@@ -58,6 +58,8 @@ export interface Settings {
   receiveMethod: ReceiveMethod;
   /** Default the claim relayer toggle to on. */
   useRelayerByDefault: boolean;
+  /** Where claimed funds are swept by default. '' = use the active identity's own payout address. */
+  claimDestination: string;
   /** Scan for incoming payments as soon as the app opens. */
   autoScanOnOpen: boolean;
   /** How long the unlock session lasts before the passphrase is asked again. */
@@ -67,6 +69,7 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   receiveMethod: 'pool',
   useRelayerByDefault: true,
+  claimDestination: '',
   autoScanOnOpen: true,
   autoLockMinutes: 360,
 };

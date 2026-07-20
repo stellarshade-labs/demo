@@ -8,8 +8,9 @@ import { useSession, type TxKind, type TxRecord, type TxStatus } from '@/store/s
 import { Panel } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, Skeleton, StatusDot } from '@/components/ui/Status';
+import { TxDetail } from './TxDetail';
 
-const KIND_META: Record<TxRecord['kind'], { label: string; Icon: typeof Send }> = {
+export const KIND_META: Record<TxRecord['kind'], { label: string; Icon: typeof Send }> = {
   send: { label: 'Sent', Icon: Send },
   claim: { label: 'Claimed', Icon: Inbox },
   publish: { label: 'Published meta-address', Icon: Globe },
@@ -86,6 +87,7 @@ export function HistoryPage() {
   const [kind, setKind] = useState<TxKind | 'all'>('all');
   const [status, setStatus] = useState<TxStatus | 'all'>('all');
   const [query, setQuery] = useState('');
+  const [selectedTx, setSelectedTx] = useState<TxRecord | null>(null);
 
   // Apply the active filters. The text search matches the counterparty address,
   // the stealth address, and the tx hash — the fields a user would recognise.
@@ -182,7 +184,7 @@ export function HistoryPage() {
               ) : (
                 <ul className="divide-y divide-ink-700">
                   {filtered.map((tx) => (
-                    <TxRow key={tx.id} tx={tx} />
+                    <TxRow key={tx.id} tx={tx} onOpen={setSelectedTx} />
                   ))}
                 </ul>
               )}
@@ -194,6 +196,8 @@ export function HistoryPage() {
       <aside>
         <AnnouncementFeed />
       </aside>
+
+      <TxDetail tx={selectedTx} onClose={() => setSelectedTx(null)} />
     </div>
   );
 }
@@ -223,12 +227,23 @@ function FilterSelect({
   );
 }
 
-function TxRow({ tx }: { tx: TxRecord }) {
+function TxRow({ tx, onOpen }: { tx: TxRecord; onOpen: (tx: TxRecord) => void }) {
   const { label, Icon } = KIND_META[tx.kind];
   const state = tx.status === 'success' ? 'ok' : tx.status === 'pending' ? 'wait' : 'bad';
 
   return (
-    <li className="flex items-start gap-4 px-5 py-4">
+    <li
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(tx)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen(tx);
+        }
+      }}
+      className="flex cursor-pointer items-start gap-4 px-5 py-4 transition-colors hover:bg-ink-800 focus:bg-ink-800 focus:outline-none"
+    >
       <Icon className="mt-0.5 size-4 shrink-0 text-ink-500" />
 
       <div className="min-w-0 flex-1">
@@ -265,6 +280,7 @@ function TxRow({ tx }: { tx: TxRecord }) {
             href={explorerTxUrl(tx.txHash)}
             target="_blank"
             rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
             className="inline-flex items-center gap-0.5 font-mono text-[10px] text-ink-500 hover:text-copper-400"
           >
             {truncate(tx.txHash, 6, 4)}

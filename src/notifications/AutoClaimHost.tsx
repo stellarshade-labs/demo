@@ -6,6 +6,7 @@ import { assetLabel } from '@/lib/format';
 import { toUserMessage } from '@/lib/errors';
 import { useServiceHealth } from '@/lib/useServiceHealth';
 import { useIdentity } from '@/identity/IdentityProvider';
+import { useIdentityStore } from '@/identity/identityStore';
 import { useSession } from '@/store/session';
 import { useScanContext } from '@/stealth/ScanProvider';
 import { useNotifyStore } from './notifyStore';
@@ -49,6 +50,7 @@ export function canAutoClaim(payoutSecret: string | null, relayerAvailable: bool
 export function AutoClaimHost() {
   const scan = useScanContext();
   const { keys, payoutAddress, payoutSecret } = useIdentity();
+  const claimDestination = useIdentityStore((s) => s.settings.claimDestination);
   const health = useServiceHealth();
   const autoClaim = useNotifyStore((s) => s.autoClaim);
   const addTx = useSession((s) => s.addTx);
@@ -69,6 +71,7 @@ export function AutoClaimHost() {
     keys,
     payoutAddress,
     payoutSecret,
+    claimDestination,
     relayerAvailable,
     addTx,
     updateTx,
@@ -78,6 +81,7 @@ export function AutoClaimHost() {
     keys,
     payoutAddress,
     payoutSecret,
+    claimDestination,
     relayerAvailable,
     addTx,
     updateTx,
@@ -89,6 +93,7 @@ export function AutoClaimHost() {
       keys,
       payoutAddress,
       payoutSecret,
+      claimDestination,
       relayerAvailable,
       addTx,
       updateTx,
@@ -106,17 +111,21 @@ export function AutoClaimHost() {
       return;
     }
 
+    // Auto-claim uses the GLOBAL default only: the configured claim destination,
+    // or the identity's own payout address when it's blank.
+    const dest = claimDestination.trim() || payoutAddress;
+
     const txId = addTx({
       kind: 'claim',
       status: 'pending',
       amount: payment.amount,
       asset: assetLabel(payment),
       stealthAddress: payment.stealthAddress,
-      counterparty: payoutAddress,
+      counterparty: dest,
     });
 
     try {
-      const receipt = await stealthClient.claim(payment, payoutAddress, {
+      const receipt = await stealthClient.claim(payment, dest, {
         keys,
         // Prefer the relayer: it hides IP + fee-payer link. Fall back to paying
         // the fee directly from the payout secret.
