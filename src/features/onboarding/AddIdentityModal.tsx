@@ -69,7 +69,11 @@ export function AddIdentityModal({ open, onClose }: { open: boolean; onClose: ()
             </div>
 
             {step === 'create' && (
-              <CreateStep identity={identity} onCreated={() => setStep('backup')} />
+              <CreateStep
+                identity={identity}
+                // A restored phrase needs no backup step — skip straight to publish.
+                onCreated={(imported) => setStep(imported ? 'publish' : 'backup')}
+              />
             )}
 
             {step === 'backup' && (

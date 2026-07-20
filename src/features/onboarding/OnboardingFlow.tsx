@@ -35,6 +35,9 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const [passphrase, setPassphrase] = useState('');
   const [publishPref, setPublishPref] = useState(false);
   const [finishing, setFinishing] = useState(false);
+  // A restored identity (mnemonic the user already has) doesn't need the backup
+  // step — they're not seeing a new phrase, so we skip straight to publish.
+  const [imported, setImported] = useState(false);
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
@@ -70,7 +73,10 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
         {step === 'create' && (
           <CreateStep
             identity={identity}
-            onCreated={() => setStep('passphrase')}
+            onCreated={(wasImported) => {
+              setImported(wasImported);
+              setStep('passphrase');
+            }}
           />
         )}
 
@@ -82,7 +88,8 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             }}
             onSet={(value) => {
               setPassphrase(value);
-              setStep('backup');
+              // Restored identities skip the backup step — nothing new to save.
+              setStep(imported ? 'publish' : 'backup');
             }}
           />
         )}
@@ -137,7 +144,14 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
 export type IdentityApi = ReturnType<typeof useIdentity>;
 
-export function CreateStep({ identity, onCreated }: { identity: IdentityApi; onCreated: () => void }) {
+export function CreateStep({
+  identity,
+  onCreated,
+}: {
+  identity: IdentityApi;
+  /** `imported` is true only when restoring a phrase the user already had. */
+  onCreated: (imported: boolean) => void;
+}) {
   const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic'>('choose');
 
   if (mode === 'wallet') {
@@ -174,7 +188,7 @@ export function CreateStep({ identity, onCreated }: { identity: IdentityApi; onC
           description="Generate fresh random keys. Back them up with the download file — there's no phrase to memorize."
           loading={identity.creating}
           onClick={async () => {
-            if (await identity.createRandom()) onCreated();
+            if (await identity.createRandom()) onCreated(false);
           }}
         />
       </div>
@@ -225,7 +239,7 @@ function WalletCreate({
 }: {
   identity: IdentityApi;
   onBack: () => void;
-  onCreated: () => void;
+  onCreated: (imported: boolean) => void;
 }) {
   const { status, address, canDeriveKeys, connector } = useWallet();
   const [modalOpen, setModalOpen] = useState(false);
@@ -262,7 +276,7 @@ function WalletCreate({
               loading={identity.creating}
               icon={<ShieldCheck className="size-4" />}
               onClick={async () => {
-                if (await identity.createFromWallet()) onCreated();
+                if (await identity.createFromWallet()) onCreated(false);
               }}
             >
               Sign to derive identity
@@ -285,7 +299,7 @@ function MnemonicCreate({
 }: {
   identity: IdentityApi;
   onBack: () => void;
-  onCreated: () => void;
+  onCreated: (imported: boolean) => void;
 }) {
   const [restoring, setRestoring] = useState(false);
   const [phrase, setPhrase] = useState('');
@@ -307,7 +321,7 @@ function MnemonicCreate({
               loading={identity.creating}
               icon={<KeyRound className="size-4" />}
               onClick={async () => {
-                if (await identity.createFromMnemonic()) onCreated();
+                if (await identity.createFromMnemonic()) onCreated(false);
               }}
             >
               Generate a new phrase
@@ -342,7 +356,7 @@ function MnemonicCreate({
                 loading={identity.creating}
                 disabled={phrase.trim().split(/\s+/).length < 12}
                 onClick={async () => {
-                  if (await identity.createFromMnemonic(phrase)) onCreated();
+                  if (await identity.createFromMnemonic(phrase)) onCreated(true);
                 }}
               >
                 Restore identity
