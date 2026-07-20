@@ -27,7 +27,9 @@ const SALT_BYTES = 16;
 const IV_BYTES = 12;
 const PAYOUT_INFO = 'shade-demo-payout/v1';
 
-export const UNLOCK_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+export const UNLOCK_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours (default fallback)
+/** `0` means "never expire" — persist the session with no expiry. */
+export const NEVER_TTL_MS = 0;
 const SESSION_KEY = 'shade.identity.session';
 
 export type IdentitySource = 'wallet' | 'mnemonic' | 'random';
@@ -197,18 +199,73 @@ export async function decryptVault(
   return { vault, key };
 }
 
+/**
+ * Decrypt with a wrap key already in hand (raw AES-256-GCM bytes), skipping the
+ * passphrase KDF entirely. Used by the passkey unlock path, which unwraps the
+ * stored wrap key from a WebAuthn PRF secret and hands the raw bytes here.
+ */
+export async function decryptVaultWithRawKey(
+  blob: EncryptedBlob,
+  rawKey: Uint8Array,
+): Promise<{ vault: Vault; key: CryptoKey }> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    rawKey as BufferSource,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt'],
+  );
+  const vault = await open(blob, key);
+  return { vault, key };
+}
+
+/** Export a wrap key to raw bytes so it can be re-wrapped under a passkey secret. */
+export async function exportRawKey(key: CryptoKey): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.exportKey('raw', key));
+}
+
+/**
+ * Change the vault passphrase without a reset. Verifies `current` by deriving
+ * its key and decrypting the stored blob, then re-encrypts the whole vault under
+ * `next` with a fresh salt. Returns the new ciphertext + the new wrap key (which
+ * the caller uses to refresh the in-memory key and the session).
+ *
+ * Throws if `current` is wrong (the underlying decrypt raises OperationError).
+ */
+export async function changePassphrase(
+  blob: EncryptedBlob,
+  current: string,
+  next: string,
+): Promise<{ blob: EncryptedBlob; key: CryptoKey }> {
+  // Verify current + recover the plaintext vault in one step.
+  const { vault } = await decryptVault(blob, current);
+  // Re-key under a brand-new salt/key.
+  return encryptVault(vault, next);
+}
+
 // ---- 6-hour sliding session ------------------------------------------------
 
 interface StoredSession {
   key: string; // base64 raw AES key
-  until: number;
+  /** Absolute expiry (ms epoch), or `null` when auto-lock is "never". */
+  until: number | null;
+  /** The TTL this session was saved with, so a slide reuses the same window. */
+  ttl: number;
 }
 
-/** Persist the wrap key for auto-unlock, expiring `UNLOCK_TTL_MS` from now. */
-export async function saveSession(key: CryptoKey): Promise<void> {
+/**
+ * Persist the wrap key for auto-unlock. `ttlMs` is the configurable auto-lock
+ * window (see settings.autoLockMinutes); `0` (NEVER_TTL_MS) means the session
+ * never expires and is only cleared on an explicit lock/reset.
+ */
+export async function saveSession(key: CryptoKey, ttlMs: number = UNLOCK_TTL_MS): Promise<void> {
   try {
     const raw = new Uint8Array(await crypto.subtle.exportKey('raw', key));
-    const payload: StoredSession = { key: toBase64(raw), until: Date.now() + UNLOCK_TTL_MS };
+    const payload: StoredSession = {
+      key: toBase64(raw),
+      until: ttlMs > 0 ? Date.now() + ttlMs : null,
+      ttl: ttlMs,
+    };
     localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
   } catch {
     // No session cache is fine — the user just re-enters the passphrase.
@@ -218,7 +275,8 @@ export async function saveSession(key: CryptoKey): Promise<void> {
 /**
  * Load a live session and decrypt the blob without a passphrase. Returns null
  * (and clears the entry) when absent, expired, or invalid. On success the
- * expiry is slid forward another 6h — "back within the window resets it".
+ * expiry is slid forward another window — "back within the window resets it".
+ * A session saved with a "never" TTL (until === null) never expires.
  *
  * The imported wrap key is returned alongside the vault so the provider can
  * re-seal after add/remove within the window without re-asking the passphrase.
@@ -236,7 +294,8 @@ export async function resumeSession(
     return null;
   }
 
-  if (!stored.until || Date.now() >= stored.until) {
+  // A finite expiry that has passed → dead. `until === null` means never expire.
+  if (stored.until !== null && (!stored.until || Date.now() >= stored.until)) {
     clearSession();
     return null;
   }
@@ -258,13 +317,19 @@ export async function resumeSession(
   }
 }
 
-/** Bump the expiry to now + 6h, keeping the same key. No-op if no session. */
-export function slideSession(): void {
+/**
+ * Bump the expiry forward by the session's own TTL, keeping the same key. No-op
+ * if there's no session or the session is "never expire". A `ttlMs` override
+ * (e.g. after the user changes the setting) re-bases the window in place.
+ */
+export function slideSession(ttlMs?: number): void {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
     if (!raw) return;
     const stored = JSON.parse(raw) as StoredSession;
-    stored.until = Date.now() + UNLOCK_TTL_MS;
+    const ttl = ttlMs ?? stored.ttl ?? UNLOCK_TTL_MS;
+    stored.ttl = ttl;
+    stored.until = ttl > 0 ? Date.now() + ttl : null;
     localStorage.setItem(SESSION_KEY, JSON.stringify(stored));
   } catch {
     // ignore

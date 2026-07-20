@@ -1,10 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Check,
   Dice5,
   Download,
   Eye,
   EyeOff,
+  Fingerprint,
   KeyRound,
   Lock,
   Pencil,
@@ -16,6 +18,7 @@ import {
 import { useIdentity } from '@/identity/IdentityProvider';
 import {
   useIdentityStore,
+  type AutoLockMinutes,
   type PublicIdentity,
   type ReceiveMethod,
 } from '@/identity/identityStore';
@@ -26,13 +29,27 @@ import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
 import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { useTour } from '@/features/tutorial/TourProvider';
 import { truncateMeta } from '@/lib/format';
+import { buildViewExport } from '@/lib/viewExport';
+import { isWebAuthnAvailable, isPlatformAuthenticatorAvailable } from '@/lib/webauthn';
+import { toUserMessage } from '@/lib/errors';
 import { Panel } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Toggle } from '@/components/ui/Toggle';
 import { HelpTip } from '@/components/ui/HelpTip';
 import { CopyField } from '@/components/ui/CopyField';
+import { QRCode } from '@/components/ui/QRCode';
 import { Notice, TxResult } from '@/components/ui/Status';
+
+const MIN_PASSPHRASE = 8;
+
+const AUTO_LOCK_OPTIONS: { value: AutoLockMinutes; label: string }[] = [
+  { value: 15, label: '15m' },
+  { value: 60, label: '1h' },
+  { value: 360, label: '6h' },
+  { value: 1440, label: '24h' },
+  { value: 0, label: 'Never' },
+];
 
 const SOURCE_ICON: Record<IdentitySource, typeof Wallet> = {
   wallet: Wallet,
@@ -202,6 +219,323 @@ export function SettingsPage() {
       <Panel eyebrow="Security" title="Backup & identity">
         <BackupControls identity={identity} />
       </Panel>
+
+      {/* Auto-lock ---------------------------------------------------------- */}
+      <Panel eyebrow="Security" title="Locking & passkey">
+        <div className="space-y-5">
+          <Row
+            label="Auto-lock"
+            help={
+              <>
+                How long your vault stays unlocked between uses before the passphrase (or passkey) is
+                asked again. The window slides forward while you're active.
+                <br />
+                <br />
+                <strong>Never</strong> keeps it unlocked in this browser indefinitely — convenient,
+                but anyone with access to this device's storage could open it. Use a short window on
+                shared machines.
+              </>
+            }
+          >
+            <AutoLockSegment
+              value={settings.autoLockMinutes}
+              onChange={(v) => setSettings({ autoLockMinutes: v })}
+            />
+          </Row>
+
+          <div className="border-t border-ink-700 pt-5">
+            <PasskeySettings identity={identity} />
+          </div>
+
+          <div className="border-t border-ink-700 pt-5">
+            <ChangePassphrase identity={identity} />
+          </div>
+        </div>
+      </Panel>
+
+      {/* View-only export --------------------------------------------------- */}
+      <Panel eyebrow="Sharing" title="View-only export">
+        <ViewExportControls identity={identity} />
+      </Panel>
+    </div>
+  );
+}
+
+function AutoLockSegment({
+  value,
+  onChange,
+}: {
+  value: AutoLockMinutes;
+  onChange: (value: AutoLockMinutes) => void;
+}) {
+  // Own implementation (not the string-keyed <Segment>) since the values here
+  // are a numeric union.
+  return (
+    <div className="inline-flex border border-ink-700">
+      {AUTO_LOCK_OPTIONS.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            className={`inline-flex items-center px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+              active ? 'bg-copper-500 text-onaccent' : 'text-ink-400 hover:text-ink-100'
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Passkey enrollment. Capability detection is layered: WebAuthn API presence
+ * (sync) gates whether we show anything; a platform-authenticator probe gates
+ * the enroll button; and PRF support is only truly confirmed by the ceremony, so
+ * enrollment failures surface a graceful message and never break passphrase use.
+ */
+function PasskeySettings({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const passkey = useIdentityStore((s) => s.passkey);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!isWebAuthnAvailable()) {
+      setAvailable(false);
+      return;
+    }
+    void isPlatformAuthenticatorAvailable().then((ok) => {
+      if (!cancelled) setAvailable(ok);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const enroll = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await identity.enrollPasskey();
+    } catch (err) {
+      setError(toUserMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // WebAuthn entirely absent → hide the feature, passphrase still works.
+  if (available === false && !passkey) {
+    return (
+      <Row
+        label="Passkey unlock"
+        help="Unlock without typing your passphrase using a device passkey (Face ID, Touch ID, Windows Hello…). Not available in this browser."
+      >
+        <span className="text-[13px] text-ink-600">Unavailable here</span>
+      </Row>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <Row
+        label="Passkey unlock"
+        help={
+          <>
+            Enroll a passkey (Face ID, Touch ID, Windows Hello, or a security key) to unlock this
+            vault with a tap instead of your passphrase. Your wrap key is sealed under the passkey's
+            PRF secret — nothing secret is stored in the clear, and the passphrase always keeps
+            working as a fallback.
+          </>
+        }
+      >
+        {passkey ? (
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 border border-signal-ok/40 bg-signal-ok/5 px-2 py-1 text-[11px] font-medium text-signal-ok">
+              <Fingerprint className="size-3" />
+              Enrolled
+            </span>
+            <Button size="sm" variant="secondary" onClick={identity.removePasskey}>
+              Remove
+            </Button>
+          </div>
+        ) : (
+          <Button
+            size="sm"
+            variant="secondary"
+            loading={busy}
+            disabled={available === null}
+            icon={<Fingerprint className="size-3.5" />}
+            onClick={() => void enroll()}
+          >
+            Enroll passkey
+          </Button>
+        )}
+      </Row>
+      {error && <Notice tone="warn">{error}</Notice>}
+    </div>
+  );
+}
+
+/** Change the vault passphrase without a reset (current + new + confirm). */
+function ChangePassphrase({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const tooShort = next.length > 0 && next.length < MIN_PASSPHRASE;
+  const mismatch = confirm.length > 0 && confirm !== next;
+  const valid = current.length > 0 && next.length >= MIN_PASSPHRASE && confirm === next;
+
+  const clearAll = () => {
+    setCurrent('');
+    setNext('');
+    setConfirm('');
+  };
+
+  const submit = async () => {
+    setBusy(true);
+    setError(null);
+    setDone(false);
+    try {
+      const ok = await identity.changePassphrase(current, next);
+      if (ok) {
+        setDone(true);
+        clearAll();
+      } else {
+        setError('Current passphrase is incorrect.');
+      }
+    } catch (err) {
+      setError(toUserMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form
+      className="space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) void submit();
+      }}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="text-sm text-ink-100">Change passphrase</span>
+        <HelpTip label="Change passphrase">
+          Re-encrypts your whole vault under a new passphrase. Your current passphrase is required.
+          Any enrolled passkey is removed and must be re-enrolled afterwards.
+        </HelpTip>
+      </div>
+      <Field
+        label="Current passphrase"
+        type="password"
+        autoComplete="current-password"
+        value={current}
+        onChange={(e) => {
+          setCurrent(e.target.value);
+          setError(null);
+          setDone(false);
+        }}
+      />
+      <Field
+        label="New passphrase"
+        type="password"
+        autoComplete="new-password"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+        error={tooShort ? `At least ${MIN_PASSPHRASE} characters.` : null}
+      />
+      <Field
+        label="Confirm new passphrase"
+        type="password"
+        autoComplete="new-password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        error={mismatch ? "Passphrases don't match." : null}
+      />
+      {error && <Notice tone="warn">{error}</Notice>}
+      {done && (
+        <div className="border border-signal-ok/40 bg-signal-ok/5 px-3 py-2 text-[13px] text-signal-ok">
+          Passphrase changed.
+        </div>
+      )}
+      <Button type="submit" size="sm" variant="secondary" loading={busy} disabled={!valid}>
+        Update passphrase
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * View-only export for the ACTIVE identity. Produces a `shade:view:` string that
+ * carries the view key + public spend key — enough to WATCH incoming payments,
+ * never to spend them. The spend private key is never included.
+ */
+function ViewExportControls({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const [revealed, setRevealed] = useState(false);
+  const secret = identity.revealSecret();
+
+  const exportString = secret
+    ? buildViewExport({
+        metaAddress: secret.stealthKeys.metaAddress,
+        viewPrivKey: secret.stealthKeys.viewPrivKey,
+        viewPubKey: secret.stealthKeys.viewPubKey,
+        spendPubKey: secret.stealthKeys.spendPubKey,
+      })
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] leading-relaxed text-ink-400">
+        Share a view-only key for your active identity. It lets another device (or a trusted person)
+        watch your incoming payments without any ability to spend them — the spend key never leaves
+        this browser. Open it in{' '}
+        <Link
+          to="/view"
+          className="text-copper-400 underline decoration-copper-500/40 underline-offset-2 hover:decoration-copper-500"
+        >
+          watch-only mode
+        </Link>
+        .
+      </p>
+
+      {!secret ? (
+        <Notice tone="info">Unlock your identity to generate a view-only key.</Notice>
+      ) : !revealed ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Eye className="size-3.5" />}
+          onClick={() => setRevealed(true)}
+        >
+          Show view-only key
+        </Button>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+            <QRCode value={exportString!} size={148} />
+            <div className="min-w-0 flex-1 space-y-2">
+              <div className="label-eyebrow">View key</div>
+              <CopyField value={exportString!} className="!text-[11px]" />
+              <p className="text-[11px] leading-relaxed text-ink-500">
+                Safe to share for watching only. It cannot spend or claim funds.
+              </p>
+              <Button size="sm" variant="ghost" onClick={() => setRevealed(false)}>
+                Hide
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

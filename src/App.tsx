@@ -12,6 +12,7 @@ import { ReceivePage } from '@/features/receive/ReceivePage';
 import { HistoryPage } from '@/features/history/HistoryPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { DemoPage } from '@/features/demo/DemoPage';
+import { WatchOnlyPage } from '@/features/view/WatchOnlyPage';
 
 export function App() {
   return (
@@ -19,7 +20,12 @@ export function App() {
       <WalletProvider>
         <IdentityProvider>
           <TourProvider>
-            <Gate />
+            {/* `/view` is watch-only and needs no identity, so it sits OUTSIDE the
+                identity gate; every other path is gated by <Gate />. */}
+            <Routes>
+              <Route path="/view" element={<WatchOnlyPage />} />
+              <Route path="*" element={<Gate />} />
+            </Routes>
           </TourProvider>
         </IdentityProvider>
       </WalletProvider>

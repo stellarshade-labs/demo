@@ -19,9 +19,12 @@ import { useWallet } from '@/wallet/WalletProvider';
 import { toUserMessage } from '@/lib/errors';
 import { clearScanCache } from '@/stealth/scanCache';
 import {
+  changePassphrase as changePassphraseCrypto,
   decryptVault,
+  decryptVaultWithRawKey,
   derivePayoutKeypair,
   encryptVault,
+  exportRawKey,
   newIdentityId,
   resealVault,
   resumeSession,
@@ -32,7 +35,13 @@ import {
   type SecretIdentity,
   type Vault,
 } from './identityCrypto';
-import { useIdentityStore, type PublicIdentity } from './identityStore';
+import { useIdentityStore, type PublicIdentity, type Settings } from './identityStore';
+import { enrollPasskey, unwrapVaultKeyWithPasskey } from '@/lib/webauthn';
+
+/** Convert the persisted auto-lock setting into a session TTL in ms. */
+function ttlFromSettings(autoLockMinutes: Settings['autoLockMinutes']): number {
+  return autoLockMinutes * 60 * 1000; // 0 → 0 (never expire)
+}
 
 /**
  * The single source of truth for *who the user is*, replacing the wallet-only
@@ -94,12 +103,24 @@ interface IdentityContextValue {
   /** Rename an identity (public label, persisted; re-seals to keep the vault in step). */
   renameIdentity: (id: string, label: string) => Promise<void>;
   unlock: (passphrase: string) => Promise<boolean>;
+  /** Unlock via an enrolled passkey (WebAuthn PRF). Throws on failure/cancel. */
+  unlockWithPasskey: () => Promise<boolean>;
   lock: () => void;
   /** Delete the whole vault from this browser. */
   reset: () => void;
   /** The decrypted ACTIVE secret for backup/reveal — only while unlocked or drafting. */
   revealSecret: () => SecretIdentity | null;
   setPublishPref: (value: boolean) => void;
+  /**
+   * Change the vault passphrase without a reset. Verifies `current`, re-keys the
+   * vault under `next`, updates the persisted blob and refreshes the session.
+   * Returns false (with `error` set) on a wrong current passphrase.
+   */
+  changePassphrase: (current: string, next: string) => Promise<boolean>;
+  /** Enroll a passkey that can unlock this vault. Requires the vault unlocked. */
+  enrollPasskey: () => Promise<void>;
+  /** Forget the enrolled passkey (passphrase unlock still works). */
+  removePasskey: () => void;
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
@@ -153,6 +174,19 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   const updateIdentityRecord = useIdentityStore((s) => s.updateIdentity);
   const setActiveIdRecord = useIdentityStore((s) => s.setActiveId);
   const clearVault = useIdentityStore((s) => s.clearVault);
+  const autoLockMinutes = useIdentityStore((s) => s.settings.autoLockMinutes);
+  const passkeyRecord = useIdentityStore((s) => s.passkey);
+  const setPasskeyRecord = useIdentityStore((s) => s.setPasskey);
+
+  // Read the current TTL lazily so session helpers always use the latest setting
+  // without re-creating callbacks on every settings change.
+  const ttlRef = useRef(ttlFromSettings(autoLockMinutes));
+  useEffect(() => {
+    ttlRef.current = ttlFromSettings(autoLockMinutes);
+    // Re-base a live session to the new window immediately when the user changes it.
+    if (vaultRecord) slideSession(ttlRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLockMinutes]);
 
   // Decrypted vault + the wrap key that sealed it, both memory-only.
   const [vault, setVault] = useState<Vault | null>(null);
@@ -211,10 +245,10 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   // resets it to 6h"). Slide on focus and on a slow heartbeat.
   useEffect(() => {
     if (!vault) return;
-    slideSession();
-    const onFocus = () => slideSession();
+    slideSession(ttlRef.current);
+    const onFocus = () => slideSession(ttlRef.current);
     window.addEventListener('focus', onFocus);
-    const beat = setInterval(slideSession, 5 * 60 * 1000);
+    const beat = setInterval(() => slideSession(ttlRef.current), 5 * 60 * 1000);
     return () => {
       window.removeEventListener('focus', onFocus);
       clearInterval(beat);
@@ -334,7 +368,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       if (!draft) throw new Error('No identity to finalize.');
       const nextVault: Vault = { version: 1, identities: [draft], activeId: draft.id };
       const { blob, key } = await encryptVault(nextVault, passphrase);
-      await saveSession(key);
+      await saveSession(key, ttlRef.current);
       const pub = { ...toPublic(draft), publishPref };
       selfSealedCtRef.current = blob.ct;
       setVaultRecord({ encrypted: blob, identities: [pub], activeId: draft.id });
@@ -464,7 +498,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         const { vault: opened, key } = await decryptVault(vaultRecord.encrypted, passphrase);
-        await saveSession(key);
+        await saveSession(key, ttlRef.current);
         setVault(normalizeVault(opened, vaultRecord.activeId));
         setWrapKey(key);
         return true;
@@ -478,12 +512,79 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     [vaultRecord],
   );
 
+  // Passkey unlock: assert the enrolled credential, unwrap the raw vault key via
+  // its PRF secret, decrypt the vault directly with that key, open the session.
+  const unlockWithPasskey = useCallback(async () => {
+    if (!vaultRecord || !passkeyRecord) return false;
+    setUnlocking(true);
+    setError(null);
+    try {
+      const rawKey = await unwrapVaultKeyWithPasskey(passkeyRecord);
+      const { vault: opened, key } = await decryptVaultWithRawKey(
+        vaultRecord.encrypted,
+        rawKey,
+      );
+      await saveSession(key, ttlRef.current);
+      setVault(normalizeVault(opened, vaultRecord.activeId));
+      setWrapKey(key);
+      return true;
+    } catch (err) {
+      // A cancelled/failed ceremony must NEVER lock the user out — the
+      // passphrase path stays available.
+      setError(toUserMessage(err));
+      return false;
+    } finally {
+      setUnlocking(false);
+    }
+  }, [vaultRecord, passkeyRecord]);
+
   const lock = useCallback(() => {
     setVault(null);
     setWrapKey(null);
     setError(null);
     clearSession();
   }, []);
+
+  // Change passphrase without a reset: re-key the vault under `next`, persist the
+  // new ciphertext, refresh the in-memory key + the session. Any enrolled passkey
+  // is invalidated (its wrapped key targets the OLD wrap key) and forgotten.
+  const changePassphrase = useCallback(
+    async (current: string, next: string) => {
+      if (!vaultRecord) return false;
+      setError(null);
+      try {
+        const { blob, key } = await changePassphraseCrypto(
+          vaultRecord.encrypted,
+          current,
+          next,
+        );
+        await saveSession(key, ttlRef.current);
+        selfSealedCtRef.current = blob.ct;
+        setVaultRecord({ ...vaultRecord, encrypted: blob });
+        saltRef.current = blob.salt;
+        setWrapKey(key);
+        if (passkeyRecord) setPasskeyRecord(null);
+        return true;
+      } catch {
+        setError('Current passphrase is incorrect.');
+        return false;
+      }
+    },
+    [vaultRecord, passkeyRecord, setVaultRecord, setPasskeyRecord],
+  );
+
+  // Enroll a passkey: export the raw wrap key held in memory, wrap it under the
+  // passkey's PRF secret, and persist the (non-secret) record. Requires unlock.
+  const enrollPasskeyFn = useCallback(async () => {
+    if (!wrapKey) throw new Error('Unlock the vault before enrolling a passkey.');
+    const rawKey = await exportRawKey(wrapKey);
+    const record = await enrollPasskey(rawKey);
+    setPasskeyRecord(record);
+  }, [wrapKey, setPasskeyRecord]);
+
+  const removePasskey = useCallback(() => {
+    setPasskeyRecord(null);
+  }, [setPasskeyRecord]);
 
   const revealSecret = useCallback(() => activeSecret ?? draft, [activeSecret, draft]);
 
@@ -524,10 +625,14 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       removeIdentity,
       renameIdentity,
       unlock,
+      unlockWithPasskey,
       lock,
       reset,
       revealSecret,
       setPublishPref,
+      changePassphrase,
+      enrollPasskey: enrollPasskeyFn,
+      removePasskey,
     }),
     [
       hydrated,
@@ -551,10 +656,14 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       removeIdentity,
       renameIdentity,
       unlock,
+      unlockWithPasskey,
       lock,
       reset,
       revealSecret,
       setPublishPref,
+      changePassphrase,
+      enrollPasskeyFn,
+      removePasskey,
     ],
   );
 

@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Eye, EyeOff, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Eye, EyeOff, Fingerprint, Lock } from 'lucide-react';
 import { useIdentity } from '@/identity/IdentityProvider';
+import { useIdentityStore } from '@/identity/identityStore';
+import { isWebAuthnAvailable } from '@/lib/webauthn';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Notice } from '@/components/ui/Status';
@@ -8,13 +10,27 @@ import { ShadeMark } from '@/components/layout/ShadeMark';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 
 /**
- * Shown when an identity exists in this browser but the 6h session has lapsed.
- * The passphrase re-derives the wrap key and reopens the sealed identity.
+ * Shown when an identity exists in this browser but the unlock session lapsed.
+ * The passphrase re-derives the wrap key and reopens the sealed vault. If a
+ * passkey is enrolled AND WebAuthn is present, an alternative one-tap unlock is
+ * offered — but the passphrase path is ALWAYS available so the user can never be
+ * locked out by a missing/failing authenticator.
  */
 export function UnlockScreen() {
-  const { unlock, unlocking, error, reset, source } = useIdentity();
+  const { unlock, unlockWithPasskey, unlocking, error, reset, source } = useIdentity();
+  const passkey = useIdentityStore((s) => s.passkey);
   const [passphrase, setPassphrase] = useState('');
   const [show, setShow] = useState(false);
+  const [webAuthnReady, setWebAuthnReady] = useState(false);
+
+  // Capability detection is synchronous here (API presence). PRF itself is only
+  // confirmed during the ceremony, so a failed passkey unlock just surfaces an
+  // error and leaves the passphrase form usable.
+  useEffect(() => {
+    setWebAuthnReady(isWebAuthnAvailable());
+  }, []);
+
+  const passkeyEnabled = Boolean(passkey) && webAuthnReady;
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
@@ -33,12 +49,31 @@ export function UnlockScreen() {
         </div>
         <h1 className="text-xl font-bold tracking-tight text-ink-50">Welcome back</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
-          Your identity is locked. Enter your passphrase to unlock it. It stays unlocked for 6 hours
-          of use.
+          Your identity is locked. {passkeyEnabled ? 'Unlock with your passkey, or enter your ' : 'Enter your '}
+          passphrase to unlock it.
         </p>
 
+        {passkeyEnabled && (
+          <div className="mt-6">
+            <Button
+              variant="primary"
+              className="w-full"
+              loading={unlocking}
+              icon={<Fingerprint className="size-4" />}
+              onClick={() => void unlockWithPasskey()}
+            >
+              Unlock with passkey
+            </Button>
+            <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-ink-600">
+              <span className="h-px flex-1 bg-ink-700" />
+              or passphrase
+              <span className="h-px flex-1 bg-ink-700" />
+            </div>
+          </div>
+        )}
+
         <form
-          className="mt-6 space-y-4"
+          className={`space-y-4 ${passkeyEnabled ? '' : 'mt-6'}`}
           onSubmit={(e) => {
             e.preventDefault();
             void unlock(passphrase);
@@ -48,7 +83,7 @@ export function UnlockScreen() {
             label="Passphrase"
             type={show ? 'text' : 'password'}
             autoComplete="current-password"
-            autoFocus
+            autoFocus={!passkeyEnabled}
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
             adornment={
@@ -65,7 +100,7 @@ export function UnlockScreen() {
           {error && <Notice tone="warn">{error}</Notice>}
           <Button
             type="submit"
-            variant="primary"
+            variant={passkeyEnabled ? 'secondary' : 'primary'}
             className="w-full"
             loading={unlocking}
             disabled={!passphrase}

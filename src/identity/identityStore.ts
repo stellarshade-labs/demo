@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { newIdentityId, type EncryptedBlob, type IdentitySource } from './identityCrypto';
+import type { PasskeyRecord } from '@/lib/webauthn';
 
 /**
  * Persisted identity vault + user settings.
@@ -45,6 +46,9 @@ interface LegacyIdentityRecord {
   encrypted: EncryptedBlob;
 }
 
+/** Auto-lock window in minutes; `0` means "never auto-lock". */
+export type AutoLockMinutes = 0 | 15 | 60 | 360 | 1440;
+
 export interface Settings {
   /** Receiver's chosen delivery method — senders honour this automatically. */
   receiveMethod: ReceiveMethod;
@@ -52,17 +56,22 @@ export interface Settings {
   useRelayerByDefault: boolean;
   /** Scan for incoming payments as soon as the app opens. */
   autoScanOnOpen: boolean;
+  /** How long the unlock session lasts before the passphrase is asked again. */
+  autoLockMinutes: AutoLockMinutes;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   receiveMethod: 'pool',
   useRelayerByDefault: true,
   autoScanOnOpen: true,
+  autoLockMinutes: 360,
 };
 
 interface IdentityStoreState {
   vault: VaultRecord | null;
   settings: Settings;
+  /** Enrolled passkey that can unlock the vault via WebAuthn PRF (non-secret). */
+  passkey: PasskeyRecord | null;
 
   setVault: (vault: VaultRecord) => void;
   updateIdentity: (id: string, patch: Partial<PublicIdentity>) => void;
@@ -70,6 +79,7 @@ interface IdentityStoreState {
   removeIdentity: (id: string) => void;
   clearVault: () => void;
   setSettings: (patch: Partial<Settings>) => void;
+  setPasskey: (passkey: PasskeyRecord | null) => void;
 }
 
 export const useIdentityStore = create<IdentityStoreState>()(
@@ -77,6 +87,7 @@ export const useIdentityStore = create<IdentityStoreState>()(
     (set) => ({
       vault: null,
       settings: DEFAULT_SETTINGS,
+      passkey: null,
 
       setVault: (vault) => set({ vault }),
       updateIdentity: (id, patch) =>
@@ -102,17 +113,21 @@ export const useIdentityStore = create<IdentityStoreState>()(
         set((state) => {
           if (!state.vault) return {};
           const identities = state.vault.identities.filter((i) => i.id !== id);
-          if (identities.length === 0) return { vault: null };
+          // Last identity gone → drop the vault AND its passkey (the wrapped key
+          // is bound to this vault's wrap key and is now useless).
+          if (identities.length === 0) return { vault: null, passkey: null };
           const activeId =
             state.vault.activeId === id ? identities[0].id : state.vault.activeId;
           return { vault: { ...state.vault, identities, activeId } };
         }),
-      clearVault: () => set({ vault: null }),
+      // A cleared/reset vault invalidates any enrolled passkey.
+      clearVault: () => set({ vault: null, passkey: null }),
       setSettings: (patch) => set((state) => ({ settings: { ...state.settings, ...patch } })),
+      setPasskey: (passkey) => set({ passkey }),
     }),
     {
       name: 'shade.identity',
-      version: 2,
+      version: 3,
       // v1 stored a single `record`; wrap it into a one-identity vault so existing
       // users keep their (still-encrypted) identity across the upgrade.
       migrate: (persisted, version) => {
@@ -147,6 +162,7 @@ export const useIdentityStore = create<IdentityStoreState>()(
           ...current,
           ...p,
           settings: { ...DEFAULT_SETTINGS, ...(p.settings ?? {}) },
+          passkey: p.passkey ?? null,
         };
       },
     },

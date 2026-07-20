@@ -373,8 +373,9 @@ function PassphraseStep({ onBack, onSet }: { onBack: () => void; onSet: (value: 
       <BackLink onClick={onBack} />
       <h2 className="text-xl font-bold tracking-tight text-ink-50">Set a passphrase</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
-        This encrypts your identity in this browser. You'll re-enter it after 6 hours of not using
-        Shade. It can't be recovered — if you forget it, restore from your backup instead.
+        This encrypts your identity in this browser. You'll re-enter it after your auto-lock window
+        (adjustable in Settings). It can't be recovered — if you forget it, restore from your backup
+        instead.
       </p>
 
       <div className="mt-6 space-y-4">
@@ -424,8 +425,25 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
   const secret = identity.revealSecret();
   const [downloaded, setDownloaded] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
+  const [phraseHidden, setPhraseHidden] = useState(false);
+  // The confirmation quiz sits after backup: mnemonic identities re-enter a few
+  // words by position; random/wallet identities tick a "saved it" box.
+  const [confirming, setConfirming] = useState(false);
 
   if (!secret) return null;
+
+  const words = secret.mnemonic ? secret.mnemonic.trim().split(/\s+/) : null;
+
+  // Confirmation phase: prove the phrase was written down (or acknowledge).
+  if (confirming) {
+    return (
+      <BackupConfirm
+        words={words}
+        onBack={() => setConfirming(false)}
+        onConfirmed={onNext}
+      />
+    );
+  }
 
   return (
     <div>
@@ -436,17 +454,29 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
       </p>
 
       <div className="mt-6 space-y-4">
-        {secret.mnemonic && (
+        {words && (
           <div>
-            <div className="label-eyebrow mb-2">Recovery phrase</div>
+            <div className="mb-2 flex items-center justify-between">
+              <div className="label-eyebrow">Recovery phrase</div>
+              <button
+                type="button"
+                onClick={() => setPhraseHidden((h) => !h)}
+                className="flex items-center gap-1.5 text-[11px] text-ink-400 hover:text-copper-400"
+              >
+                {phraseHidden ? <Eye className="size-3" /> : <EyeOff className="size-3" />}
+                {phraseHidden ? 'Show' : 'Hide'}
+              </button>
+            </div>
             <div className="grid grid-cols-3 gap-2">
-              {secret.mnemonic.split(/\s+/).map((word, i) => (
+              {words.map((word, i) => (
                 <div
                   key={i}
                   className="flex items-center gap-1.5 border border-ink-700 bg-ink-900 px-2.5 py-1.5"
                 >
                   <span className="font-mono text-[10px] text-ink-600">{i + 1}</span>
-                  <span className="font-mono text-[13px] text-ink-100">{word}</span>
+                  <span className="font-mono text-[13px] text-ink-100">
+                    {phraseHidden ? '•'.repeat(Math.max(4, word.length)) : word}
+                  </span>
                 </div>
               ))}
             </div>
@@ -491,9 +521,123 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
           className="w-full"
           disabled={!downloaded}
           icon={<ArrowRight className="size-4" />}
-          onClick={onNext}
+          onClick={() => setConfirming(true)}
         >
           I've saved my backup
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Pick `count` distinct 0-based indices in [0, len). */
+function pickPositions(len: number, count: number): number[] {
+  const n = Math.min(count, len);
+  const chosen = new Set<number>();
+  while (chosen.size < n) chosen.add(Math.floor(Math.random() * len));
+  return [...chosen].sort((a, b) => a - b);
+}
+
+/**
+ * Backup confirmation. For mnemonic identities we quiz the user on 2–3 random
+ * words (by position) to prove the phrase was actually recorded. For random /
+ * wallet identities there's no phrase to quiz, so a required acknowledgement
+ * checkbox stands in. The phrase can be re-shown before confirming.
+ */
+function BackupConfirm({
+  words,
+  onBack,
+  onConfirmed,
+}: {
+  words: string[] | null;
+  onBack: () => void;
+  onConfirmed: () => void;
+}) {
+  // Quiz 3 positions for 24-word phrases, 2 for 12-word (or whatever's shorter).
+  const [positions] = useState(() =>
+    words ? pickPositions(words.length, words.length > 12 ? 3 : 2) : [],
+  );
+  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [acked, setAcked] = useState(false);
+  const [checked, setChecked] = useState(false);
+
+  if (!words) {
+    // No phrase → acknowledgement checkbox for random/wallet identities.
+    return (
+      <div>
+        <BackLink onClick={onBack} />
+        <h2 className="text-xl font-bold tracking-tight text-ink-50">Confirm your backup</h2>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
+          There's no phrase to memorise for this identity — your backup file is the only copy of the
+          keys. Make sure you've stored it somewhere safe before continuing.
+        </p>
+
+        <label className="mt-6 flex cursor-pointer items-start gap-3 border border-ink-700 bg-ink-900 p-4 text-left transition-colors hover:border-ink-600">
+          <input
+            type="checkbox"
+            checked={acked}
+            onChange={(e) => setAcked(e.target.checked)}
+            className="mt-0.5 size-4 accent-[#c8763c]"
+          />
+          <span className="text-[13px] leading-relaxed text-ink-200">
+            I've securely saved my backup file. I understand it can't be recovered if I lose it.
+          </span>
+        </label>
+
+        <Button
+          variant="primary"
+          className="mt-6 w-full"
+          disabled={!acked}
+          icon={<ArrowRight className="size-4" />}
+          onClick={onConfirmed}
+        >
+          Confirm & continue
+        </Button>
+      </div>
+    );
+  }
+
+  const allCorrect = positions.every(
+    (p) => (answers[p] ?? '').trim().toLowerCase() === words[p].toLowerCase(),
+  );
+
+  return (
+    <div>
+      <BackLink onClick={onBack} />
+      <h2 className="text-xl font-bold tracking-tight text-ink-50">Confirm your phrase</h2>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
+        Enter the following words from your recovery phrase to confirm you've written it down. Go
+        back if you need to see it again.
+      </p>
+
+      <div className="mt-6 space-y-4">
+        {positions.map((p) => (
+          <Field
+            key={p}
+            label={`Word #${p + 1}`}
+            mono
+            autoComplete="off"
+            spellCheck={false}
+            value={answers[p] ?? ''}
+            onChange={(e) => setAnswers((prev) => ({ ...prev, [p]: e.target.value }))}
+            error={
+              checked && (answers[p] ?? '').trim().toLowerCase() !== words[p].toLowerCase()
+                ? 'Does not match.'
+                : null
+            }
+          />
+        ))}
+
+        <Button
+          variant="primary"
+          className="w-full"
+          icon={<ArrowRight className="size-4" />}
+          onClick={() => {
+            setChecked(true);
+            if (allCorrect) onConfirmed();
+          }}
+        >
+          Confirm phrase
         </Button>
       </div>
     </div>
