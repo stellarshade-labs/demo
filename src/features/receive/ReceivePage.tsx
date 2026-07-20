@@ -3,6 +3,7 @@ import { Dice5, Globe, KeyRound, RefreshCw, Sparkles, Trash2, Wallet } from 'luc
 import { NETWORK } from '@/config/network';
 import { formatAmount, truncate } from '@/lib/format';
 import { buildPayLink } from '@/lib/paylink';
+import { COMMON_TOKENS, assetString, isCompleteAsset } from '@/lib/tokens';
 import { fundWithFriendbot } from '@/lib/friendbot';
 import { toUserMessage } from '@/lib/errors';
 import { useIdentity } from '@/identity/IdentityProvider';
@@ -33,8 +34,19 @@ export function ReceivePage() {
   const balance = useBalance(payoutAddress);
 
   const [requestAmount, setRequestAmount] = useState('');
+  // Asset for the request: `tokenMode` off = native XLM; on = a token whose
+  // CODE:ISSUER lives in `asset` (editable, prefilled from a quick chip).
+  const [tokenMode, setTokenMode] = useState(false);
+  const [asset, setAsset] = useState('');
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+
+  const assetTrimmed = asset.trim();
+  const assetCode = !tokenMode ? 'XLM' : (assetTrimmed.split(':')[0] || 'Token').toUpperCase();
+  const assetComplete = isCompleteAsset(assetTrimmed);
+  // Only put a token in the link once it's a full CODE:ISSUER, so the payer's
+  // Send form never prefills an unsendable half-asset.
+  const assetParam = tokenMode && assetComplete ? assetTrimmed : undefined;
 
   const sourceMeta = source ? SOURCE_META[source] : null;
 
@@ -66,7 +78,13 @@ export function ReceivePage() {
     }
   };
 
-  const payLink = metaAddress ? buildPayLink({ to: metaAddress, amount: requestAmount.trim() || undefined }) : '';
+  const payLink = metaAddress
+    ? buildPayLink({
+        to: metaAddress,
+        amount: requestAmount.trim() || undefined,
+        asset: assetParam,
+      })
+    : '';
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -156,6 +174,16 @@ export function ReceivePage() {
               0.5 XLM as reserve, refunded if you remove it.
             </p>
 
+            <div className="mb-3">
+              <div className="label-eyebrow mb-1.5">Your public address</div>
+              <CopyField value={payoutAddress ?? ''} display={truncate(payoutAddress, 10, 8)} />
+              <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
+                {source === 'wallet'
+                  ? 'This is your connected wallet — senders pay you here.'
+                  : "Derived from your keys — this is your public address even without a wallet. Fund it (Balance panel above) to activate it on-chain, then you can publish."}
+              </p>
+            </div>
+
             {!pub.canManage && (
               <div className="mb-3">
                 <Notice tone="info">
@@ -217,6 +245,54 @@ export function ReceivePage() {
               {payLink ? <QRCode value={payLink} size={148} /> : null}
             </div>
             <div className="min-w-0 flex-1 space-y-4">
+              <div>
+                <div className="label-eyebrow mb-2">Asset</div>
+                <div className="flex flex-wrap gap-1.5">
+                  <TokenChip active={!tokenMode} onClick={() => setTokenMode(false)}>
+                    XLM
+                  </TokenChip>
+                  {COMMON_TOKENS.map((t) => (
+                    <TokenChip
+                      key={t.code}
+                      active={tokenMode && assetCode === t.code}
+                      onClick={() => {
+                        setTokenMode(true);
+                        setAsset(assetString(t));
+                      }}
+                    >
+                      {t.code}
+                    </TokenChip>
+                  ))}
+                  <TokenChip
+                    active={tokenMode && !COMMON_TOKENS.some((t) => t.code === assetCode)}
+                    onClick={() => {
+                      setTokenMode(true);
+                      setAsset('');
+                    }}
+                  >
+                    Custom
+                  </TokenChip>
+                </div>
+                {tokenMode && (
+                  <div className="mt-3">
+                    <Field
+                      label="Token (code:issuer)"
+                      mono
+                      autoComplete="off"
+                      spellCheck={false}
+                      placeholder="USDC:GA5Z…"
+                      value={asset}
+                      onChange={(e) => setAsset(e.target.value)}
+                      hint={
+                        assetComplete
+                          ? undefined
+                          : 'Enter CODE:ISSUER to include this token in the link.'
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+
               <Field
                 label="Request amount (optional)"
                 type="number"
@@ -227,7 +303,7 @@ export function ReceivePage() {
                 placeholder="0.00"
                 value={requestAmount}
                 onChange={(e) => setRequestAmount(e.target.value)}
-                adornment={<span className="text-xs text-ink-500">XLM</span>}
+                adornment={<span className="text-xs text-ink-500">{assetCode}</span>}
                 hint="Leave blank to let the payer choose."
               />
               <div>
@@ -295,6 +371,30 @@ export function ReceivePage() {
         )}
       </aside>
     </div>
+  );
+}
+
+function TokenChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`border px-2.5 py-1 font-mono text-xs transition-colors ${
+        active
+          ? 'border-copper-500 bg-copper-500/10 text-copper-300'
+          : 'border-ink-700 text-ink-400 hover:border-ink-600 hover:text-ink-100'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
