@@ -46,8 +46,12 @@ interface LegacyIdentityRecord {
   encrypted: EncryptedBlob;
 }
 
-/** Auto-lock window in minutes; `0` means "never auto-lock". */
-export type AutoLockMinutes = 0 | 15 | 60 | 360 | 1440;
+/**
+ * Auto-lock window in minutes. `0` = never auto-lock; `-1` = instant, i.e. hold
+ * the identity in memory only and never persist a resumable session, so closing
+ * or reloading the tab always re-locks.
+ */
+export type AutoLockMinutes = -1 | 0 | 15 | 60 | 360 | 1440;
 
 export interface Settings {
   /** Receiver's chosen delivery method — senders honour this automatically. */

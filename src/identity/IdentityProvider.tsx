@@ -38,9 +38,13 @@ import {
 import { useIdentityStore, type PublicIdentity, type Settings } from './identityStore';
 import { enrollPasskey, unwrapVaultKeyWithPasskey } from '@/lib/webauthn';
 
-/** Convert the persisted auto-lock setting into a session TTL in ms. */
+/**
+ * Convert the persisted auto-lock setting into a session TTL in ms. Both `0`
+ * (never) and `-1` (instant) map to a 0 TTL here; "instant" is realised by not
+ * persisting a session at all (see `persistSession`), not by the TTL.
+ */
 function ttlFromSettings(autoLockMinutes: Settings['autoLockMinutes']): number {
-  return autoLockMinutes * 60 * 1000; // 0 → 0 (never expire)
+  return autoLockMinutes > 0 ? autoLockMinutes * 60 * 1000 : 0;
 }
 
 /**
@@ -181,12 +185,27 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
   // Read the current TTL lazily so session helpers always use the latest setting
   // without re-creating callbacks on every settings change.
   const ttlRef = useRef(ttlFromSettings(autoLockMinutes));
+  const instantRef = useRef(autoLockMinutes === -1);
   useEffect(() => {
     ttlRef.current = ttlFromSettings(autoLockMinutes);
-    // Re-base a live session to the new window immediately when the user changes it.
-    if (vaultRecord) slideSession(ttlRef.current);
+    instantRef.current = autoLockMinutes === -1;
+    if (!vaultRecord) return;
+    // Switching to "instant" drops any resumable session so a reload re-locks;
+    // otherwise re-base the live session to the newly chosen window.
+    if (instantRef.current) clearSession();
+    else slideSession(ttlRef.current);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoLockMinutes]);
+
+  /**
+   * Persist (or deliberately don't) the unlock session for the active lock mode.
+   * Instant mode keeps the wrap key in React memory only — nothing resumable is
+   * written, so the next fresh load asks for the passphrase (or passkey) again.
+   */
+  const persistSession = useCallback(async (key: CryptoKey) => {
+    if (instantRef.current) clearSession();
+    else await saveSession(key, ttlRef.current);
+  }, []);
 
   // Decrypted vault + the wrap key that sealed it, both memory-only.
   const [vault, setVault] = useState<Vault | null>(null);
@@ -368,7 +387,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       if (!draft) throw new Error('No identity to finalize.');
       const nextVault: Vault = { version: 1, identities: [draft], activeId: draft.id };
       const { blob, key } = await encryptVault(nextVault, passphrase);
-      await saveSession(key, ttlRef.current);
+      await persistSession(key);
       const pub = { ...toPublic(draft), publishPref };
       selfSealedCtRef.current = blob.ct;
       setVaultRecord({ encrypted: blob, identities: [pub], activeId: draft.id });
@@ -498,7 +517,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         const { vault: opened, key } = await decryptVault(vaultRecord.encrypted, passphrase);
-        await saveSession(key, ttlRef.current);
+        await persistSession(key);
         setVault(normalizeVault(opened, vaultRecord.activeId));
         setWrapKey(key);
         return true;
@@ -524,7 +543,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         vaultRecord.encrypted,
         rawKey,
       );
-      await saveSession(key, ttlRef.current);
+      await persistSession(key);
       setVault(normalizeVault(opened, vaultRecord.activeId));
       setWrapKey(key);
       return true;
@@ -558,7 +577,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
           current,
           next,
         );
-        await saveSession(key, ttlRef.current);
+        await persistSession(key);
         selfSealedCtRef.current = blob.ct;
         setVaultRecord({ ...vaultRecord, encrypted: blob });
         saltRef.current = blob.salt;

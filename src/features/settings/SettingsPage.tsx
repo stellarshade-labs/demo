@@ -46,6 +46,7 @@ import { Notice, TxResult } from '@/components/ui/Status';
 const MIN_PASSPHRASE = 8;
 
 const AUTO_LOCK_OPTIONS: { value: AutoLockMinutes; label: string }[] = [
+  { value: -1, label: 'Instant' },
   { value: 15, label: '15m' },
   { value: 60, label: '1h' },
   { value: 360, label: '6h' },
@@ -232,6 +233,9 @@ export function SettingsPage() {
                 How long your vault stays unlocked between uses before the passphrase (or passkey) is
                 asked again. The window slides forward while you're active.
                 <br />
+                <br />
+                <strong>Instant</strong> keeps your identity in memory only — nothing resumable is
+                stored, so closing or reloading the tab re-locks it immediately (most private).
                 <br />
                 <strong>Never</strong> keeps it unlocked in this browser indefinitely — convenient,
                 but anyone with access to this device's storage could open it. Use a short window on
