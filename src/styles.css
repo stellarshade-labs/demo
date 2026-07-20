@@ -1,0 +1,124 @@
+@import 'tailwindcss';
+
+/*
+ * Shade visual identity.
+ * Graphite instrument-panel base, single warm copper accent. No gradients.
+ */
+@theme {
+  --color-ink-950: #0b0c0e; /* app background */
+  --color-ink-900: #101216; /* sunken wells, code blocks */
+  --color-ink-850: #141619; /* panel surface */
+  --color-ink-800: #191c21; /* raised surface, hover */
+  --color-ink-700: #232830; /* hairline border */
+  --color-ink-600: #333a45; /* hairline border, emphasized */
+  --color-ink-400: #6b7480; /* muted text */
+  --color-ink-300: #8d97a4; /* secondary text */
+  --color-ink-100: #d6dae0; /* primary text */
+  --color-ink-50: #f0f2f5; /* headings */
+
+  --color-copper-600: #a75c2b;
+  --color-copper-500: #c8763c;
+  --color-copper-400: #dd9057;
+  --color-copper-300: #e8ab7c;
+
+  --color-signal-ok: #5f9e73;
+  --color-signal-wait: #c9973f;
+  --color-signal-bad: #b4553f;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+
+  --radius-panel: 4px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink-950);
+    color: var(--color-ink-100);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv11';
+  }
+
+  ::selection {
+    background: var(--color-copper-600);
+    color: #fff;
+  }
+
+  *:focus-visible {
+    outline: 1px solid var(--color-copper-500);
+    outline-offset: 2px;
+  }
+
+  /* Inputs never get the default rounded-pill look. */
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    appearance: none;
+    margin: 0;
+  }
+}
+
+@layer components {
+  /* Small-caps section label used on every panel header. */
+  .label-eyebrow {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-ink-400);
+  }
+}
+
+/* Scrollbars, tuned down to hairlines so they read as part of the chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-ink-700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-700);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes shade-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-shade-pulse {
+  animation: shade-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes shade-sheen {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.animate-shade-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.04), transparent);
+  animation: shade-sheen 1.4s infinite;
+}
