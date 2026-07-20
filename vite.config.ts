@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 import path from 'node:path';
 
 // stellar-shade and @stellar/stellar-sdk both reference `Buffer` and `global`
@@ -10,6 +11,11 @@ import path from 'node:path';
 // app dies at the first send/scan call, in dev *and* in the production bundle.
 export default defineConfig({
   plugins: [
+    // Opt-in self-signed HTTPS for testing on a phone over the LAN: Web Crypto
+    // (crypto.subtle — vault encryption, key derivation) is only exposed in a
+    // secure context, so a plain http:// LAN IP can't create an identity.
+    // Enable with: HTTPS=true npm run dev -- --host
+    ...(process.env.HTTPS === 'true' ? [basicSsl()] : []),
     react(),
     tailwindcss(),
     nodePolyfills({
