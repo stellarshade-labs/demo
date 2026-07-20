@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { ArrowUpRight, Globe, History, Inbox, Send, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowUpRight, Download, Globe, History, Inbox, Search, Send, Trash2 } from 'lucide-react';
 import type { IndexerAnnouncement } from 'stellar-shade';
 import { indexerClient } from '@/lib/shade';
 import { explorerTxUrl } from '@/config/network';
 import { timeAgo, truncate } from '@/lib/format';
-import { useSession, type TxRecord } from '@/store/session';
+import { useSession, type TxKind, type TxRecord, type TxStatus } from '@/store/session';
 import { Panel } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { EmptyState, Skeleton, StatusDot } from '@/components/ui/Status';
@@ -16,9 +16,96 @@ const KIND_META: Record<TxRecord['kind'], { label: string; Icon: typeof Send }> 
   unpublish: { label: 'Removed meta-address', Icon: Trash2 },
 };
 
+const KIND_FILTERS: { value: TxKind | 'all'; label: string }[] = [
+  { value: 'all', label: 'All kinds' },
+  { value: 'send', label: 'Sent' },
+  { value: 'claim', label: 'Claimed' },
+  { value: 'publish', label: 'Published' },
+  { value: 'unpublish', label: 'Removed' },
+];
+
+const STATUS_FILTERS: { value: TxStatus | 'all'; label: string }[] = [
+  { value: 'all', label: 'Any status' },
+  { value: 'success', label: 'Success' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'error', label: 'Error' },
+];
+
+/** RFC-4180 field escaping: wrap in quotes and double any embedded quotes. */
+function csvCell(value: string | number | undefined): string {
+  const s = value === undefined ? '' : String(value);
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+/** Build a CSV blob from the given rows and trigger a download. */
+function exportCsv(rows: TxRecord[]): void {
+  const header = [
+    'id',
+    'kind',
+    'status',
+    'created_at',
+    'amount',
+    'asset',
+    'counterparty',
+    'stealth_address',
+    'tx_hash',
+    'error',
+  ];
+  const lines = [header.join(',')];
+  for (const tx of rows) {
+    lines.push(
+      [
+        csvCell(tx.id),
+        csvCell(tx.kind),
+        csvCell(tx.status),
+        csvCell(new Date(tx.createdAt).toISOString()),
+        csvCell(tx.amount),
+        csvCell(tx.asset),
+        csvCell(tx.counterparty),
+        csvCell(tx.stealthAddress),
+        csvCell(tx.txHash),
+        csvCell(tx.error),
+      ].join(','),
+    );
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `shade-transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function HistoryPage() {
   const transactions = useSession((s) => s.transactions);
   const clearTransactions = useSession((s) => s.clearTransactions);
+
+  const [kind, setKind] = useState<TxKind | 'all'>('all');
+  const [status, setStatus] = useState<TxStatus | 'all'>('all');
+  const [query, setQuery] = useState('');
+
+  // Apply the active filters. The text search matches the counterparty address,
+  // the stealth address, and the tx hash — the fields a user would recognise.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return transactions.filter((tx) => {
+      if (kind !== 'all' && tx.kind !== kind) return false;
+      if (status !== 'all' && tx.status !== status) return false;
+      if (q) {
+        const haystack = [tx.counterparty, tx.stealthAddress, tx.txHash]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [transactions, kind, status, query]);
+
+  const hasFilter = kind !== 'all' || status !== 'all' || query.trim() !== '';
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -37,9 +124,21 @@ export function HistoryPage() {
           bodyClassName=""
           action={
             transactions.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearTransactions}>
-                Clear
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Download className="size-3.5" />}
+                  disabled={filtered.length === 0}
+                  onClick={() => exportCsv(filtered)}
+                  title={hasFilter ? 'Export the filtered rows' : 'Export all transactions'}
+                >
+                  {hasFilter ? `Export ${filtered.length}` : 'Export CSV'}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={clearTransactions}>
+                  Clear
+                </Button>
+              </div>
             )
           }
         >
@@ -50,11 +149,44 @@ export function HistoryPage() {
               description="Sends, claims, and meta-address publications will be listed here."
             />
           ) : (
-            <ul className="divide-y divide-ink-700">
-              {transactions.map((tx) => (
-                <TxRow key={tx.id} tx={tx} />
-              ))}
-            </ul>
+            <>
+              <div className="flex flex-wrap items-center gap-2 border-b border-ink-700 px-5 py-3">
+                <div className="relative flex-1 min-w-[160px]">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-ink-500" />
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search address or tx hash"
+                    className="h-9 w-full border border-ink-700 bg-ink-900 pl-8 pr-3 text-[13px] text-ink-50 placeholder:text-ink-600 focus:border-copper-500 focus:outline-none"
+                  />
+                </div>
+                <FilterSelect
+                  value={kind}
+                  onChange={(v) => setKind(v as TxKind | 'all')}
+                  options={KIND_FILTERS}
+                />
+                <FilterSelect
+                  value={status}
+                  onChange={(v) => setStatus(v as TxStatus | 'all')}
+                  options={STATUS_FILTERS}
+                />
+              </div>
+
+              {filtered.length === 0 ? (
+                <EmptyState
+                  icon={<Search className="size-6" />}
+                  title="No matches"
+                  description="No transactions match the current filters."
+                />
+              ) : (
+                <ul className="divide-y divide-ink-700">
+                  {filtered.map((tx) => (
+                    <TxRow key={tx.id} tx={tx} />
+                  ))}
+                </ul>
+              )}
+            </>
           )}
         </Panel>
       </div>
@@ -63,6 +195,31 @@ export function HistoryPage() {
         <AnnouncementFeed />
       </aside>
     </div>
+  );
+}
+
+/** A compact native select styled to match the app's controls. */
+function FilterSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-9 border border-ink-700 bg-ink-900 px-2 text-[13px] text-ink-100 focus:border-copper-500 focus:outline-none"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

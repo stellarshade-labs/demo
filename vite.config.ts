@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { VitePWA } from 'vite-plugin-pwa';
 import path from 'node:path';
 
 // stellar-shade and @stellar/stellar-sdk both reference `Buffer` and `global`
@@ -14,6 +15,32 @@ export default defineConfig({
     nodePolyfills({
       include: ['buffer', 'crypto', 'stream', 'util', 'events', 'process'],
       globals: { Buffer: true, global: true, process: true },
+    }),
+    // Makes Shade installable (add-to-home-screen) and caches the shell so the
+    // app opens offline. NOTE: a service worker cannot reliably run background
+    // crypto scans once every tab is closed — no browser guarantees wake-ups for
+    // that — so "background" here means: installed app + scan-on-open + browser
+    // notifications while a tab is alive, not closed-tab polling.
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['shade-icon.svg'],
+      manifest: {
+        name: 'Shade',
+        short_name: 'Shade',
+        description: 'Stealth, unlinkable payments on Stellar.',
+        theme_color: '#0b0c0e',
+        background_color: '#0b0c0e',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          {
+            src: 'shade-icon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+        ],
+      },
     }),
   ],
   resolve: {
