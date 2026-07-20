@@ -1,13 +1,20 @@
-import { Dice5, Globe, KeyRound, RefreshCw, Trash2, Wallet } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Dice5, Globe, KeyRound, RefreshCw, Sparkles, Trash2, Wallet } from 'lucide-react';
 import { NETWORK } from '@/config/network';
-import { truncate } from '@/lib/format';
+import { formatAmount, truncate } from '@/lib/format';
+import { buildPayLink } from '@/lib/paylink';
+import { fundWithFriendbot } from '@/lib/friendbot';
+import { toUserMessage } from '@/lib/errors';
 import { useIdentity } from '@/identity/IdentityProvider';
 import { useIdentityStore } from '@/identity/identityStore';
 import { usePublish } from '@/identity/usePublish';
-import { useScan } from '@/stealth/useScan';
+import { useBalance } from '@/stealth/useBalance';
+import { useScanContext } from '@/stealth/ScanProvider';
 import { Panel, Well } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
 import { CopyField } from '@/components/ui/CopyField';
+import { Field } from '@/components/ui/Field';
+import { QRCode } from '@/components/ui/QRCode';
 import { Notice, TxResult } from '@/components/ui/Status';
 import { ClaimList } from './ClaimList';
 
@@ -18,13 +25,48 @@ const SOURCE_META = {
 } as const;
 
 export function ReceivePage() {
-  const { keys, metaAddress, payoutAddress, payoutSecret, source } = useIdentity();
+  const { metaAddress, payoutAddress, payoutSecret, source } = useIdentity();
   const settings = useIdentityStore((s) => s.settings);
   const pub = usePublish();
 
-  const scan = useScan(payoutAddress, keys, { auto: settings.autoScanOnOpen });
+  const scan = useScanContext();
+  const balance = useBalance(payoutAddress);
+
+  const [requestAmount, setRequestAmount] = useState('');
+  const [funding, setFunding] = useState(false);
+  const [fundError, setFundError] = useState<string | null>(null);
 
   const sourceMeta = source ? SOURCE_META[source] : null;
+
+  // Total value still waiting to be claimed, across every detected payment.
+  const totalClaimable = useMemo(
+    () =>
+      scan.payments
+        .filter((p) => !scan.claimed.has(p.stealthAddress))
+        .reduce((sum, p) => sum + p.amount, 0),
+    [scan.payments, scan.claimed],
+  );
+
+  // Offer a faucet only on testnet, and only once we know the account is unfunded.
+  const canFund = NETWORK.isTestnet && !balance.funded && !balance.loading && !!payoutAddress;
+
+  const handleFund = async () => {
+    if (!payoutAddress) return;
+    setFunding(true);
+    setFundError(null);
+    try {
+      await fundWithFriendbot(payoutAddress);
+      // Funding unblocks publish + claim — refresh both so the UI catches up.
+      await balance.reload();
+      await pub.refresh();
+    } catch (err) {
+      setFundError(toUserMessage(err));
+    } finally {
+      setFunding(false);
+    }
+  };
+
+  const payLink = metaAddress ? buildPayLink({ to: metaAddress, amount: requestAmount.trim() || undefined }) : '';
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -36,6 +78,50 @@ export function ReceivePage() {
             Payments land at one-time addresses only you can find.
           </p>
         </div>
+
+        <Panel eyebrow="At a glance" title="Balance">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <div className="label-eyebrow mb-1.5">Payout balance</div>
+              <div className="font-mono text-2xl font-semibold text-ink-50">
+                {balance.native === null ? '—' : formatAmount(balance.native)}{' '}
+                <span className="text-base font-normal text-ink-400">XLM</span>
+              </div>
+              {!balance.funded && !balance.loading && (
+                <p className="mt-1 text-xs text-ink-500">Account not yet funded on-chain.</p>
+              )}
+            </div>
+            <div className="text-right">
+              <div className="label-eyebrow mb-1.5">Claimable</div>
+              <div className="font-mono text-2xl font-semibold text-copper-300">
+                {formatAmount(totalClaimable)}
+              </div>
+              <p className="mt-1 text-xs text-ink-500">across detected payments</p>
+            </div>
+          </div>
+
+          {canFund && (
+            <div className="mt-5 border-t border-ink-700 pt-5">
+              <p className="mb-3 text-[13px] leading-relaxed text-ink-400">
+                This payout account isn&apos;t funded yet. On testnet you can seed it from
+                Friendbot, which unblocks publishing and claiming.
+              </p>
+              <Button
+                variant="secondary"
+                loading={funding}
+                icon={<Sparkles className="size-4" />}
+                onClick={() => void handleFund()}
+              >
+                Fund with Friendbot
+              </Button>
+              {fundError && (
+                <div className="mt-3">
+                  <TxResult status="error" message={fundError} onDismiss={() => setFundError(null)} />
+                </div>
+              )}
+            </div>
+          )}
+        </Panel>
 
         <Panel
           eyebrow="Your identity"
@@ -121,6 +207,37 @@ export function ReceivePage() {
           </div>
         </Panel>
 
+        <Panel eyebrow="Share" title="Scan to pay">
+          <p className="mb-4 text-[13px] leading-relaxed text-ink-400">
+            Hand out this QR or link and the payer lands on a pre-filled Send form. Optionally
+            request a specific amount.
+          </p>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+            <div className="shrink-0 self-center sm:self-start">
+              {payLink ? <QRCode value={payLink} size={148} /> : null}
+            </div>
+            <div className="min-w-0 flex-1 space-y-4">
+              <Field
+                label="Request amount (optional)"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                mono
+                placeholder="0.00"
+                value={requestAmount}
+                onChange={(e) => setRequestAmount(e.target.value)}
+                adornment={<span className="text-xs text-ink-500">XLM</span>}
+                hint="Leave blank to let the payer choose."
+              />
+              <div>
+                <div className="label-eyebrow mb-2">Pay link</div>
+                <CopyField value={payLink} />
+              </div>
+            </div>
+          </div>
+        </Panel>
+
         <Panel
           eyebrow="Incoming"
           title="Detected payments"
@@ -138,7 +255,7 @@ export function ReceivePage() {
           bodyClassName=""
         >
           <div data-tour="scan">
-            <ClaimList scan={scan} />
+            <ClaimList />
           </div>
         </Panel>
       </div>
