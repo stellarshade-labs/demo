@@ -6,16 +6,20 @@ import type { StealthKeys } from 'stellar-shade';
  *
  * Unlike the wallet-signature model (keys re-derived every tab, never stored),
  * a mnemonic/random identity has nothing to re-derive from, so we DO persist it
- * — but only ever as ciphertext. The secret blob (stealth private keys + the
- * payout secret + the mnemonic) is sealed with AES-256-GCM under a key derived
- * from the user's passphrase via PBKDF2.
+ * — but only ever as ciphertext. The secret blob is a *vault* of one or more
+ * identities (each carrying its stealth private keys + payout secret + mnemonic)
+ * sealed as a single unit with AES-256-GCM under a key derived from the user's
+ * passphrase via PBKDF2. One passphrase unlocks the whole vault.
  *
  * The 6-hour sliding unlock is a deliberate convenience/security trade the user
  * asked for: after a passphrase unlock we cache the *derived wrap key* (not the
  * passphrase) in localStorage with an expiry, so returning within the window
- * skips the prompt. That means during the window the identity is decryptable by
+ * skips the prompt. That means during the window the vault is decryptable by
  * anyone with access to this browser's storage — the same posture the encrypted
  * scan cache already accepts (see stealth/scanCache.ts), scoped here to 6h.
+ *
+ * Caching the wrap key also lets the provider re-seal the vault (after adding or
+ * removing an identity) without re-prompting for the passphrase.
  */
 
 const PBKDF2_ITERATIONS = 210_000;
@@ -35,13 +39,27 @@ export interface PayoutAccount {
   secret?: string;
 }
 
-/** The plaintext that gets encrypted. Never touches disk unsealed. */
+/** A single identity's secret material. Never touches disk unsealed. */
 export interface SecretIdentity {
   version: 1;
+  /** Stable identifier, minted once with crypto.randomUUID(). */
+  id: string;
   source: IdentitySource;
   stealthKeys: StealthKeys;
   mnemonic?: string;
   payout: PayoutAccount;
+  /** Optional user-facing name for the switcher. */
+  label?: string;
+}
+
+/**
+ * The plaintext that gets encrypted: the whole set of identities plus which one
+ * is active. Sealed and opened as one unit under the single vault passphrase.
+ */
+export interface Vault {
+  version: 1;
+  identities: SecretIdentity[];
+  activeId: string;
 }
 
 export interface EncryptedBlob {
@@ -114,9 +132,9 @@ async function deriveWrapKey(
   );
 }
 
-async function seal(secret: SecretIdentity, key: CryptoKey, salt: Uint8Array): Promise<EncryptedBlob> {
+async function seal(vault: Vault, key: CryptoKey, salt: Uint8Array): Promise<EncryptedBlob> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
-  const plaintext = new TextEncoder().encode(JSON.stringify(secret));
+  const plaintext = new TextEncoder().encode(JSON.stringify(vault));
   const ciphertext = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv: iv as BufferSource },
     key,
@@ -131,34 +149,52 @@ async function seal(secret: SecretIdentity, key: CryptoKey, salt: Uint8Array): P
   };
 }
 
-async function open(blob: EncryptedBlob, key: CryptoKey): Promise<SecretIdentity> {
+async function open(blob: EncryptedBlob, key: CryptoKey): Promise<Vault> {
   const plaintext = await crypto.subtle.decrypt(
     { name: 'AES-GCM', iv: fromBase64(blob.iv) as BufferSource },
     key,
     fromBase64(blob.ct) as BufferSource,
   );
-  return JSON.parse(new TextDecoder().decode(plaintext)) as SecretIdentity;
+  return JSON.parse(new TextDecoder().decode(plaintext)) as Vault;
 }
 
-/** Encrypt an identity, returning the ciphertext and the wrap key for the session. */
-export async function encryptIdentity(
-  secret: SecretIdentity,
+/** A fresh, stable identity id. */
+export function newIdentityId(): string {
+  return crypto.randomUUID();
+}
+
+/** Encrypt the vault fresh (new salt/key), for a first passphrase or a re-key. */
+export async function encryptVault(
+  vault: Vault,
   passphrase: string,
 ): Promise<{ blob: EncryptedBlob; key: CryptoKey }> {
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const key = await deriveWrapKey(passphrase, salt, PBKDF2_ITERATIONS);
-  const blob = await seal(secret, key, salt);
+  const blob = await seal(vault, key, salt);
   return { blob, key };
 }
 
+/**
+ * Re-seal the vault with a wrap key already held in memory (from the session),
+ * so add/remove edits persist without re-prompting for the passphrase. The salt
+ * is reused because it's bound to that key; only the IV rotates per encryption.
+ */
+export async function resealVault(
+  vault: Vault,
+  key: CryptoKey,
+  salt: string,
+): Promise<EncryptedBlob> {
+  return seal(vault, key, fromBase64(salt));
+}
+
 /** Decrypt with a passphrase. Throws (OperationError) if the passphrase is wrong. */
-export async function decryptIdentity(
+export async function decryptVault(
   blob: EncryptedBlob,
   passphrase: string,
-): Promise<{ secret: SecretIdentity; key: CryptoKey }> {
+): Promise<{ vault: Vault; key: CryptoKey }> {
   const key = await deriveWrapKey(passphrase, fromBase64(blob.salt), blob.iterations);
-  const secret = await open(blob, key);
-  return { secret, key };
+  const vault = await open(blob, key);
+  return { vault, key };
 }
 
 // ---- 6-hour sliding session ------------------------------------------------
@@ -183,8 +219,13 @@ export async function saveSession(key: CryptoKey): Promise<void> {
  * Load a live session and decrypt the blob without a passphrase. Returns null
  * (and clears the entry) when absent, expired, or invalid. On success the
  * expiry is slid forward another 6h — "back within the window resets it".
+ *
+ * The imported wrap key is returned alongside the vault so the provider can
+ * re-seal after add/remove within the window without re-asking the passphrase.
  */
-export async function resumeSession(blob: EncryptedBlob): Promise<SecretIdentity | null> {
+export async function resumeSession(
+  blob: EncryptedBlob,
+): Promise<{ vault: Vault; key: CryptoKey } | null> {
   let stored: StoredSession;
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -208,9 +249,9 @@ export async function resumeSession(blob: EncryptedBlob): Promise<SecretIdentity
       true,
       ['encrypt', 'decrypt'],
     );
-    const secret = await open(blob, key);
+    const vault = await open(blob, key);
     slideSession();
-    return secret;
+    return { vault, key };
   } catch {
     clearSession();
     return null;

@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -18,26 +19,34 @@ import { useWallet } from '@/wallet/WalletProvider';
 import { toUserMessage } from '@/lib/errors';
 import { clearScanCache } from '@/stealth/scanCache';
 import {
-  decryptIdentity,
+  decryptVault,
   derivePayoutKeypair,
-  encryptIdentity,
+  encryptVault,
+  newIdentityId,
+  resealVault,
   resumeSession,
   saveSession,
   slideSession,
   clearSession,
   type IdentitySource,
   type SecretIdentity,
+  type Vault,
 } from './identityCrypto';
-import { useIdentityStore } from './identityStore';
+import { useIdentityStore, type PublicIdentity } from './identityStore';
 
 /**
  * The single source of truth for *who the user is*, replacing the wallet-only
  * StealthKeysProvider. An identity can be created three ways — from a wallet
- * signature, a mnemonic, or randomly — then sealed under a passphrase and kept
- * for the 6h sliding window (see identityCrypto).
+ * signature, a mnemonic, or randomly. Many identities live together in one
+ * *vault* sealed under a single passphrase and kept for the 6h sliding window
+ * (see identityCrypto).
  *
- * Decrypted keys (`keys`, `payoutSecret`) live in React state only; the store
- * persists ciphertext + public fields.
+ * The decrypted vault and its wrap key (`keys`, `payoutSecret`, `wrapKey`) live
+ * in React state only; the store persists ciphertext + public fields. Holding
+ * the wrap key in memory lets us re-seal after add/remove without re-prompting.
+ *
+ * The public getters expose the *active* identity's values, so all downstream
+ * scan/claim/publish code keeps working unchanged when the user switches.
  */
 
 export type IdentityStatus = 'absent' | 'locked' | 'unlocked';
@@ -48,7 +57,7 @@ interface IdentityContextValue {
   status: IdentityStatus;
   source: IdentitySource | null;
 
-  /** Stealth keys — same shape the scan/claim code already consumes. */
+  /** Stealth keys of the ACTIVE identity — same shape scan/claim already consume. */
   keys: StealthKeys | null;
   metaAddress: string | null;
   /** G-address funds are claimed into. */
@@ -57,7 +66,12 @@ interface IdentityContextValue {
   payoutSecret: string | null;
   publishPref: boolean;
 
-  /** In-flight onboarding identity, before a passphrase seals it. */
+  /** Public list of every identity in the vault (non-secret). */
+  identities: PublicIdentity[];
+  /** Id of the active identity, or null when absent/locked with no public list. */
+  activeId: string | null;
+
+  /** In-flight onboarding identity, before it's committed to the vault. */
   draft: SecretIdentity | null;
   creating: boolean;
   unlocking: boolean;
@@ -67,12 +81,23 @@ interface IdentityContextValue {
   createFromMnemonic: (phrase?: string) => Promise<SecretIdentity | null>;
   createRandom: () => Promise<SecretIdentity | null>;
   discardDraft: () => void;
+  /** First-run: create the vault with the first identity under a passphrase. */
   finalize: (passphrase: string, publishPref: boolean) => Promise<void>;
+  /** Begin a draft-create flow to add another identity to the unlocked vault. */
+  addIdentity: () => void;
+  /** Commit the current draft to the open vault, re-sealing with the held key. */
+  finalizeAddition: (publishPref: boolean) => Promise<void>;
+  /** Make an existing identity the active one (state + persist, no re-seal). */
+  switchIdentity: (id: string) => void;
+  /** Remove an identity; re-seals without it, or resets if it was the last. */
+  removeIdentity: (id: string) => Promise<void>;
+  /** Rename an identity (public label, persisted; re-seals to keep the vault in step). */
+  renameIdentity: (id: string, label: string) => Promise<void>;
   unlock: (passphrase: string) => Promise<boolean>;
   lock: () => void;
-  /** Delete the identity from this browser entirely. */
+  /** Delete the whole vault from this browser. */
   reset: () => void;
-  /** The decrypted secret for backup/reveal — only while unlocked or drafting. */
+  /** The decrypted ACTIVE secret for backup/reveal — only while unlocked or drafting. */
   revealSecret: () => SecretIdentity | null;
   setPublishPref: (value: boolean) => void;
 }
@@ -89,47 +114,103 @@ export function signerFromSecret(secret: string): TransactionSigner {
   };
 }
 
+/** Derive the public, persistable view of a secret identity. */
+function toPublic(secret: SecretIdentity): PublicIdentity {
+  return {
+    id: secret.id,
+    source: secret.source,
+    metaAddress: secret.stealthKeys.metaAddress,
+    payoutAddress: secret.payout.publicKey,
+    publishPref: false,
+    createdAt: Date.now(),
+    label: secret.label,
+  };
+}
+
+/**
+ * Accept either a real Vault or a legacy single SecretIdentity (pre-v2 ciphertext
+ * migrated in place) and normalise to a Vault. The persisted `activeId` (which the
+ * user may have changed while locked) wins when it names a member; for the legacy
+ * single-secret case it also seeds the id, since old secrets predate stable ids.
+ */
+function normalizeVault(opened: Vault | SecretIdentity, persistedActiveId: string): Vault {
+  if ((opened as Vault).identities) {
+    const v = opened as Vault;
+    const activeId = v.identities.some((i) => i.id === persistedActiveId)
+      ? persistedActiveId
+      : v.activeId;
+    return { ...v, activeId };
+  }
+  const legacy = opened as SecretIdentity;
+  const id = legacy.id ?? persistedActiveId;
+  return { version: 1, identities: [{ ...legacy, id }], activeId: id };
+}
+
 export function IdentityProvider({ children }: { children: ReactNode }) {
   const { address, signMessage, canDeriveKeys } = useWallet();
-  const record = useIdentityStore((s) => s.record);
-  const setRecord = useIdentityStore((s) => s.setRecord);
-  const updateRecord = useIdentityStore((s) => s.updateRecord);
-  const clearIdentity = useIdentityStore((s) => s.clearIdentity);
+  const vaultRecord = useIdentityStore((s) => s.vault);
+  const setVaultRecord = useIdentityStore((s) => s.setVault);
+  const updateIdentityRecord = useIdentityStore((s) => s.updateIdentity);
+  const setActiveIdRecord = useIdentityStore((s) => s.setActiveId);
+  const clearVault = useIdentityStore((s) => s.clearVault);
 
-  const [secret, setSecret] = useState<SecretIdentity | null>(null);
+  // Decrypted vault + the wrap key that sealed it, both memory-only.
+  const [vault, setVault] = useState<Vault | null>(null);
+  const [wrapKey, setWrapKey] = useState<CryptoKey | null>(null);
   const [draft, setDraft] = useState<SecretIdentity | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const [creating, setCreating] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Salt is bound to the wrap key; keep it so we can re-seal in place.
+  const saltRef = useRef<string | null>(null);
+  useEffect(() => {
+    saltRef.current = vaultRecord?.encrypted.salt ?? null;
+  }, [vaultRecord?.encrypted.salt]);
+
+  // Ciphertext we produced ourselves (create/add/remove/rename): the in-memory
+  // vault already reflects it, so the resume effect below must not re-decrypt it
+  // (which would churn the `keys` reference and needlessly re-trigger scans).
+  const selfSealedCtRef = useRef<string | null>(null);
+
+  const activeId = vaultRecord?.activeId ?? null;
+
   // Silent resume: if a live 6h session exists, decrypt without a passphrase.
   // Written to be StrictMode-safe — the final (persistent) effect run is the one
   // that flips `hydrated`, so a cancelled first run never leaves us on the splash.
   useEffect(() => {
     let cancelled = false;
-    if (!record) {
+    if (!vaultRecord) {
+      setHydrated(true);
+      return;
+    }
+    // Skip when the ciphertext change was our own re-seal of an open vault.
+    if (selfSealedCtRef.current === vaultRecord.encrypted.ct) {
       setHydrated(true);
       return;
     }
     (async () => {
-      const resumed = await resumeSession(record.encrypted);
+      const resumed = await resumeSession(vaultRecord.encrypted);
       if (cancelled) return;
-      if (resumed) setSecret(resumed);
+      if (resumed) {
+        setVault(normalizeVault(resumed.vault, vaultRecord.activeId));
+        setWrapKey(resumed.key);
+      }
       setHydrated(true);
     })();
     return () => {
       cancelled = true;
     };
-    // Only re-run when the ciphertext itself changes (create/reset), not on every
-    // record field tweak like publishPref.
+    // Only re-run when the ciphertext itself changes (create/reset/re-seal), not on
+    // every record field tweak like publishPref or activeId.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [record?.encrypted.ct]);
+  }, [vaultRecord?.encrypted.ct]);
 
   // Keep the window alive while the user is active ("back within the window
   // resets it to 6h"). Slide on focus and on a slow heartbeat.
   useEffect(() => {
-    if (!secret) return;
+    if (!vault) return;
     slideSession();
     const onFocus = () => slideSession();
     window.addEventListener('focus', onFocus);
@@ -138,7 +219,17 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('focus', onFocus);
       clearInterval(beat);
     };
-  }, [secret]);
+  }, [vault]);
+
+  // The active decrypted identity, or the active public record when locked.
+  const activeSecret = useMemo(
+    () => vault?.identities.find((i) => i.id === vault.activeId) ?? null,
+    [vault],
+  );
+  const activePublic = useMemo(
+    () => vaultRecord?.identities.find((i) => i.id === vaultRecord.activeId) ?? null,
+    [vaultRecord],
+  );
 
   const buildDraft = useCallback(
     async (
@@ -150,6 +241,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         // Wallet identities claim back to the connected wallet (external signer).
         return {
           version: 1,
+          id: newIdentityId(),
           source,
           stealthKeys,
           payout: { publicKey: extras.walletAddress! },
@@ -160,6 +252,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       const kp = await derivePayoutKeypair(stealthKeys);
       return {
         version: 1,
+        id: newIdentityId(),
         source,
         stealthKeys,
         mnemonic: extras.mnemonic,
@@ -235,34 +328,145 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
+  // First run: build the vault around the first identity under a new passphrase.
   const finalize = useCallback(
     async (passphrase: string, publishPref: boolean) => {
       if (!draft) throw new Error('No identity to finalize.');
-      const { blob, key } = await encryptIdentity(draft, passphrase);
+      const nextVault: Vault = { version: 1, identities: [draft], activeId: draft.id };
+      const { blob, key } = await encryptVault(nextVault, passphrase);
       await saveSession(key);
-      setRecord({
-        source: draft.source,
-        metaAddress: draft.stealthKeys.metaAddress,
-        payoutAddress: draft.payout.publicKey,
-        createdAt: Date.now(),
-        publishPref,
-        encrypted: blob,
-      });
-      setSecret(draft);
+      const pub = { ...toPublic(draft), publishPref };
+      selfSealedCtRef.current = blob.ct;
+      setVaultRecord({ encrypted: blob, identities: [pub], activeId: draft.id });
+      saltRef.current = blob.salt;
+      setVault(nextVault);
+      setWrapKey(key);
       setDraft(null);
     },
-    [draft, setRecord],
+    [draft, setVaultRecord],
+  );
+
+  const addIdentity = useCallback(() => {
+    setDraft(null);
+    setError(null);
+  }, []);
+
+  // Append the current draft to the OPEN vault and re-seal with the held key.
+  const finalizeAddition = useCallback(
+    async (publishPref: boolean) => {
+      if (!draft) throw new Error('No identity to add.');
+      if (!vault || !wrapKey || !saltRef.current) {
+        throw new Error('Vault must be unlocked to add an identity.');
+      }
+      const nextVault: Vault = {
+        ...vault,
+        identities: [...vault.identities, draft],
+        activeId: draft.id,
+      };
+      const blob = await resealVault(nextVault, wrapKey, saltRef.current);
+      const pub = { ...toPublic(draft), publishPref };
+      selfSealedCtRef.current = blob.ct;
+      setVaultRecord({
+        encrypted: blob,
+        identities: [...(vaultRecord?.identities ?? []), pub],
+        activeId: draft.id,
+      });
+      saltRef.current = blob.salt;
+      setVault(nextVault);
+      setDraft(null);
+    },
+    [draft, vault, wrapKey, vaultRecord, setVaultRecord],
+  );
+
+  const switchIdentity = useCallback(
+    (id: string) => {
+      if (!vault?.identities.some((i) => i.id === id)) {
+        // Fall back to the public list when locked, so the switcher still works.
+        if (!vaultRecord?.identities.some((i) => i.id === id)) return;
+      }
+      setActiveIdRecord(id);
+      setVault((prev) => (prev ? { ...prev, activeId: id } : prev));
+    },
+    [vault, vaultRecord, setActiveIdRecord],
+  );
+
+  const reset = useCallback(() => {
+    if (vaultRecord) {
+      for (const i of vaultRecord.identities) clearScanCache(i.payoutAddress);
+    }
+    clearVault();
+    clearSession();
+    saltRef.current = null;
+    setVault(null);
+    setWrapKey(null);
+    setDraft(null);
+    setError(null);
+  }, [vaultRecord, clearVault]);
+
+  const removeIdentity = useCallback(
+    async (id: string) => {
+      if (!vault || !wrapKey || !saltRef.current) return;
+      const remaining = vault.identities.filter((i) => i.id !== id);
+      // Removing the last identity is a full reset.
+      if (remaining.length === 0) {
+        reset();
+        return;
+      }
+      const removed = vault.identities.find((i) => i.id === id);
+      if (removed) clearScanCache(removed.payout.publicKey);
+      const nextActive =
+        vault.activeId === id ? remaining[0].id : vault.activeId;
+      const nextVault: Vault = { ...vault, identities: remaining, activeId: nextActive };
+      const blob = await resealVault(nextVault, wrapKey, saltRef.current);
+      selfSealedCtRef.current = blob.ct;
+      setVaultRecord({
+        encrypted: blob,
+        identities: (vaultRecord?.identities ?? []).filter((i) => i.id !== id),
+        activeId: nextActive,
+      });
+      saltRef.current = blob.salt;
+      setVault(nextVault);
+    },
+    [vault, wrapKey, vaultRecord, reset, setVaultRecord],
+  );
+
+  const renameIdentity = useCallback(
+    async (id: string, label: string) => {
+      const trimmed = label.trim();
+      const next = trimmed || undefined;
+      // Persist the public label immediately so the switcher updates even locked.
+      updateIdentityRecord(id, { label: next });
+      if (!vault || !wrapKey || !saltRef.current) return;
+      const nextVault: Vault = {
+        ...vault,
+        identities: vault.identities.map((i) => (i.id === id ? { ...i, label: next } : i)),
+      };
+      const blob = await resealVault(nextVault, wrapKey, saltRef.current);
+      // updateIdentityRecord already patched the label; also swap in fresh ciphertext.
+      selfSealedCtRef.current = blob.ct;
+      setVaultRecord({
+        encrypted: blob,
+        identities: (vaultRecord?.identities ?? []).map((i) =>
+          i.id === id ? { ...i, label: next } : i,
+        ),
+        activeId: vaultRecord?.activeId ?? nextVault.activeId,
+      });
+      saltRef.current = blob.salt;
+      setVault(nextVault);
+    },
+    [vault, wrapKey, vaultRecord, updateIdentityRecord, setVaultRecord],
   );
 
   const unlock = useCallback(
     async (passphrase: string) => {
-      if (!record) return false;
+      if (!vaultRecord) return false;
       setUnlocking(true);
       setError(null);
       try {
-        const { secret: opened, key } = await decryptIdentity(record.encrypted, passphrase);
+        const { vault: opened, key } = await decryptVault(vaultRecord.encrypted, passphrase);
         await saveSession(key);
-        setSecret(opened);
+        setVault(normalizeVault(opened, vaultRecord.activeId));
+        setWrapKey(key);
         return true;
       } catch {
         setError('Incorrect passphrase.');
@@ -271,43 +475,40 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
         setUnlocking(false);
       }
     },
-    [record],
+    [vaultRecord],
   );
 
   const lock = useCallback(() => {
-    setSecret(null);
+    setVault(null);
+    setWrapKey(null);
     setError(null);
     clearSession();
   }, []);
 
-  const reset = useCallback(() => {
-    if (record) clearScanCache(record.payoutAddress);
-    clearIdentity();
-    clearSession();
-    setSecret(null);
-    setDraft(null);
-    setError(null);
-  }, [record, clearIdentity]);
-
-  const revealSecret = useCallback(() => secret ?? draft, [secret, draft]);
+  const revealSecret = useCallback(() => activeSecret ?? draft, [activeSecret, draft]);
 
   const setPublishPref = useCallback(
-    (value: boolean) => updateRecord({ publishPref: value }),
-    [updateRecord],
+    (value: boolean) => {
+      const id = vaultRecord?.activeId;
+      if (id) updateIdentityRecord(id, { publishPref: value });
+    },
+    [vaultRecord?.activeId, updateIdentityRecord],
   );
 
-  const status: IdentityStatus = secret ? 'unlocked' : record ? 'locked' : 'absent';
+  const status: IdentityStatus = vault ? 'unlocked' : vaultRecord ? 'locked' : 'absent';
 
   const value = useMemo<IdentityContextValue>(
     () => ({
       hydrated,
       status,
-      source: secret?.source ?? record?.source ?? draft?.source ?? null,
-      keys: secret?.stealthKeys ?? null,
-      metaAddress: secret?.stealthKeys.metaAddress ?? record?.metaAddress ?? null,
-      payoutAddress: secret?.payout.publicKey ?? record?.payoutAddress ?? null,
-      payoutSecret: secret?.payout.secret ?? null,
-      publishPref: record?.publishPref ?? false,
+      source: activeSecret?.source ?? activePublic?.source ?? draft?.source ?? null,
+      keys: activeSecret?.stealthKeys ?? null,
+      metaAddress: activeSecret?.stealthKeys.metaAddress ?? activePublic?.metaAddress ?? null,
+      payoutAddress: activeSecret?.payout.publicKey ?? activePublic?.payoutAddress ?? null,
+      payoutSecret: activeSecret?.payout.secret ?? null,
+      publishPref: activePublic?.publishPref ?? false,
+      identities: vaultRecord?.identities ?? [],
+      activeId,
       draft,
       creating,
       unlocking,
@@ -317,6 +518,11 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       createRandom,
       discardDraft,
       finalize,
+      addIdentity,
+      finalizeAddition,
+      switchIdentity,
+      removeIdentity,
+      renameIdentity,
       unlock,
       lock,
       reset,
@@ -326,8 +532,10 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     [
       hydrated,
       status,
-      secret,
-      record,
+      activeSecret,
+      activePublic,
+      vaultRecord,
+      activeId,
       draft,
       creating,
       unlocking,
@@ -337,6 +545,11 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       createRandom,
       discardDraft,
       finalize,
+      addIdentity,
+      finalizeAddition,
+      switchIdentity,
+      removeIdentity,
+      renameIdentity,
       unlock,
       lock,
       reset,

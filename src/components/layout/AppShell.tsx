@@ -1,10 +1,29 @@
-import type { ReactNode } from 'react';
-import { NavLink } from 'react-router-dom';
-import { ArrowUpRight, History, Inbox, Lock, Send, Settings, Sparkles } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Dice5,
+  History,
+  Inbox,
+  KeyRound,
+  Lock,
+  Plus,
+  Send,
+  Settings,
+  SlidersHorizontal,
+  Sparkles,
+  Wallet,
+} from 'lucide-react';
 import { NETWORK } from '@/config/network';
 import { useServiceHealth } from '@/lib/useServiceHealth';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useIdentity } from '@/identity/IdentityProvider';
+import type { IdentitySource } from '@/identity/identityCrypto';
+import type { PublicIdentity } from '@/identity/identityStore';
+import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
+import { truncateMeta } from '@/lib/format';
 import { ConnectButton } from '@/components/wallet/ConnectButton';
 import { StatusDot } from '@/components/ui/Status';
 import { ThemeToggle } from '@/theme/ThemeToggle';
@@ -83,6 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <IdentitySwitcher />
             <ThemeToggle />
             <button
               type="button"
@@ -112,6 +132,133 @@ export function AppShell({ children }: { children: ReactNode }) {
           external audit — do not use it with real value.
         </footer>
       </div>
+    </div>
+  );
+}
+
+const SOURCE_ICON: Record<IdentitySource, typeof Wallet> = {
+  wallet: Wallet,
+  mnemonic: KeyRound,
+  random: Dice5,
+};
+
+function identityName(identity: PublicIdentity): string {
+  return identity.label?.trim() || truncateMeta(identity.metaAddress);
+}
+
+/**
+ * Compact header control showing the active identity, with a dropdown to switch
+ * between the vault's identities, add a new one, or jump to Settings → Identities.
+ */
+function IdentitySwitcher() {
+  const { identities, activeId, switchIdentity } = useIdentity();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const active = identities.find((i) => i.id === activeId) ?? null;
+  if (!active) return null;
+
+  const ActiveIcon = SOURCE_ICON[active.source];
+
+  return (
+    <div ref={ref} className="relative" data-tour="identity">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        title="Switch identity"
+        className="inline-flex h-8 items-center gap-1.5 rounded-[3px] border border-ink-600 px-2 text-ink-200 transition-colors hover:border-ink-400 hover:text-ink-50"
+      >
+        <ActiveIcon className="size-3.5 shrink-0 text-copper-400" />
+        <span className="max-w-[120px] truncate font-mono text-xs max-md:hidden">
+          {identityName(active)}
+        </span>
+        <ChevronDown className="size-3.5 shrink-0 text-ink-500" />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-40 mt-1.5 w-64 border border-ink-700 bg-ink-900 py-1 shadow-lg"
+        >
+          <div className="label-eyebrow px-3 py-1.5">Identities</div>
+          <div className="max-h-64 overflow-y-auto">
+            {identities.map((i) => {
+              const Icon = SOURCE_ICON[i.source];
+              const isActive = i.id === activeId;
+              return (
+                <button
+                  key={i.id}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    switchIdentity(i.id);
+                    setOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-ink-850"
+                >
+                  <Icon className="size-3.5 shrink-0 text-copper-400" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] text-ink-100">
+                      {i.label?.trim() || 'Unnamed identity'}
+                    </span>
+                    <span className="block truncate font-mono text-[11px] text-ink-500">
+                      {truncateMeta(i.metaAddress)}
+                    </span>
+                  </span>
+                  {isActive && <Check className="size-3.5 shrink-0 text-copper-400" />}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-1 border-t border-ink-700 pt-1">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                setAdding(true);
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-200 transition-colors hover:bg-ink-850"
+            >
+              <Plus className="size-3.5 shrink-0 text-copper-400" />
+              Add identity
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpen(false);
+                navigate('/settings');
+              }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-400 transition-colors hover:bg-ink-850 hover:text-ink-100"
+            >
+              <SlidersHorizontal className="size-3.5 shrink-0" />
+              Manage in Settings
+            </button>
+          </div>
+        </div>
+      )}
+
+      <AddIdentityModal open={adding} onClose={() => setAdding(false)} />
     </div>
   );
 }

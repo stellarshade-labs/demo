@@ -1,17 +1,50 @@
 import { useState, type ReactNode } from 'react';
-import { Download, Eye, EyeOff, Lock, Sun, Trash2 } from 'lucide-react';
+import {
+  Check,
+  Dice5,
+  Download,
+  Eye,
+  EyeOff,
+  KeyRound,
+  Lock,
+  Pencil,
+  Plus,
+  Sun,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
 import { useIdentity } from '@/identity/IdentityProvider';
-import { useIdentityStore, type ReceiveMethod } from '@/identity/identityStore';
+import {
+  useIdentityStore,
+  type PublicIdentity,
+  type ReceiveMethod,
+} from '@/identity/identityStore';
+import type { IdentitySource } from '@/identity/identityCrypto';
 import { usePublish } from '@/identity/usePublish';
 import { downloadBackup } from '@/identity/backup';
+import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
 import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { useTour } from '@/features/tutorial/TourProvider';
+import { truncateMeta } from '@/lib/format';
 import { Panel } from '@/components/ui/Panel';
 import { Button } from '@/components/ui/Button';
+import { Field } from '@/components/ui/Field';
 import { Toggle } from '@/components/ui/Toggle';
 import { HelpTip } from '@/components/ui/HelpTip';
 import { CopyField } from '@/components/ui/CopyField';
 import { Notice, TxResult } from '@/components/ui/Status';
+
+const SOURCE_ICON: Record<IdentitySource, typeof Wallet> = {
+  wallet: Wallet,
+  mnemonic: KeyRound,
+  random: Dice5,
+};
+
+const SOURCE_LABEL: Record<IdentitySource, string> = {
+  wallet: 'Wallet',
+  mnemonic: 'Phrase',
+  random: 'Random',
+};
 
 export function SettingsPage() {
   const identity = useIdentity();
@@ -156,10 +189,177 @@ export function SettingsPage() {
         </div>
       </Panel>
 
+      {/* Identities --------------------------------------------------------- */}
+      <Panel eyebrow="Identities" title="Your identities">
+        <IdentitiesSettings identity={identity} />
+      </Panel>
+
+      {/* Insertion points for sibling agents' settings sections. */}
+      {/* INSERT: ContactsSettings */}
+      {/* INSERT: NotificationsSettings */}
+
       {/* Backup & security -------------------------------------------------- */}
       <Panel eyebrow="Security" title="Backup & identity">
         <BackupControls identity={identity} />
       </Panel>
+    </div>
+  );
+}
+
+function IdentitiesSettings({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const { identities, activeId, switchIdentity, removeIdentity, renameIdentity } = identity;
+  const [adding, setAdding] = useState(false);
+
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] leading-relaxed text-ink-400">
+        All of these are unlocked by your one passphrase. Switch which one you're using, rename them,
+        or add another.
+      </p>
+
+      <div className="divide-y divide-ink-700 border border-ink-700">
+        {identities.map((item) => (
+          <IdentityRow
+            key={item.id}
+            item={item}
+            active={item.id === activeId}
+            canRemove={identities.length > 1}
+            onSwitch={() => switchIdentity(item.id)}
+            onRename={(label) => void renameIdentity(item.id, label)}
+            onRemove={() => {
+              if (
+                window.confirm(
+                  'Remove this identity from the vault? You can restore it from its backup. This cannot be undone.',
+                )
+              ) {
+                void removeIdentity(item.id);
+              }
+            }}
+          />
+        ))}
+      </div>
+
+      <Button
+        size="sm"
+        variant="secondary"
+        icon={<Plus className="size-3.5" />}
+        onClick={() => setAdding(true)}
+      >
+        Add identity
+      </Button>
+
+      <AddIdentityModal open={adding} onClose={() => setAdding(false)} />
+    </div>
+  );
+}
+
+function IdentityRow({
+  item,
+  active,
+  canRemove,
+  onSwitch,
+  onRename,
+  onRemove,
+}: {
+  item: PublicIdentity;
+  active: boolean;
+  canRemove: boolean;
+  onSwitch: () => void;
+  onRename: (label: string) => void;
+  onRemove: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draftLabel, setDraftLabel] = useState(item.label ?? '');
+  const Icon = SOURCE_ICON[item.source];
+
+  const commit = () => {
+    onRename(draftLabel);
+    setEditing(false);
+  };
+
+  return (
+    <div className="flex items-start gap-3 p-3">
+      <Icon className="mt-0.5 size-4 shrink-0 text-copper-400" />
+      <div className="min-w-0 flex-1">
+        {editing ? (
+          <Field
+            label="Name"
+            autoFocus
+            value={draftLabel}
+            placeholder="e.g. Personal, Work"
+            onChange={(e) => setDraftLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commit();
+              if (e.key === 'Escape') {
+                setDraftLabel(item.label ?? '');
+                setEditing(false);
+              }
+            }}
+          />
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="truncate text-sm text-ink-100">
+              {item.label?.trim() || 'Unnamed identity'}
+            </span>
+            {active && (
+              <span className="inline-flex items-center gap-1 border border-copper-500/40 bg-copper-500/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-copper-300">
+                <Check className="size-2.5" />
+                Active
+              </span>
+            )}
+            <span className="border border-ink-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-ink-400">
+              {SOURCE_LABEL[item.source]}
+            </span>
+          </div>
+        )}
+        <div className="mt-1 truncate font-mono text-[11px] text-ink-500">
+          {truncateMeta(item.metaAddress)}
+        </div>
+
+        {editing && (
+          <div className="mt-2 flex gap-2">
+            <Button size="sm" variant="secondary" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" variant="primary" onClick={commit}>
+              Save
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {!editing && (
+        <div className="flex shrink-0 items-center gap-1">
+          {!active && (
+            <Button size="sm" variant="secondary" onClick={onSwitch}>
+              Switch
+            </Button>
+          )}
+          <button
+            type="button"
+            aria-label="Rename identity"
+            title="Rename"
+            onClick={() => {
+              setDraftLabel(item.label ?? '');
+              setEditing(true);
+            }}
+            className="inline-flex size-7 items-center justify-center rounded-[3px] border border-ink-700 text-ink-400 transition-colors hover:border-ink-500 hover:text-ink-100"
+          >
+            <Pencil className="size-3.5" />
+          </button>
+          {canRemove && (
+            <button
+              type="button"
+              aria-label="Remove identity"
+              title="Remove"
+              onClick={onRemove}
+              className="inline-flex size-7 items-center justify-center rounded-[3px] border border-ink-700 text-ink-400 transition-colors hover:border-signal-bad/50 hover:text-signal-bad"
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

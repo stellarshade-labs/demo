@@ -135,9 +135,9 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
 
 // --- Step 2: create ---------------------------------------------------------
 
-type IdentityApi = ReturnType<typeof useIdentity>;
+export type IdentityApi = ReturnType<typeof useIdentity>;
 
-function CreateStep({ identity, onCreated }: { identity: IdentityApi; onCreated: () => void }) {
+export function CreateStep({ identity, onCreated }: { identity: IdentityApi; onCreated: () => void }) {
   const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic'>('choose');
 
   if (mode === 'wallet') {
@@ -420,7 +420,7 @@ function PassphraseStep({ onBack, onSet }: { onBack: () => void; onSet: (value: 
 
 // --- Step 4: backup ---------------------------------------------------------
 
-function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext: () => void }) {
+export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext: () => void }) {
   const secret = identity.revealSecret();
   const [downloaded, setDownloaded] = useState(false);
   const [showKeys, setShowKeys] = useState(false);
@@ -511,16 +511,18 @@ function KeyRow({ label, value }: { label: string; value: string }) {
 
 // --- Step 5: publish --------------------------------------------------------
 
-function PublishStep({
+export function PublishStep({
   value,
   onChange,
   onFinish,
   finishing,
+  finishLabel = 'Finish setup',
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
   onFinish: () => void;
   finishing: boolean;
+  finishLabel?: string;
 }) {
   return (
     <div>
@@ -553,7 +555,7 @@ function PublishStep({
         icon={<ArrowRight className="size-4" />}
         onClick={onFinish}
       >
-        Finish setup
+        {finishLabel}
       </Button>
     </div>
   );
