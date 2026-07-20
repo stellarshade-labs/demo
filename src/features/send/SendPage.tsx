@@ -56,7 +56,9 @@ export function SendPage() {
     setRecipient(params.to);
     if (params.amount) setAmount(params.amount);
     if (params.asset) setAsset(params.asset);
-    setMethodOverride(null);
+    // A pay-link can carry the recipient's method (a meta-address has no
+    // on-chain entry to resolve it from), so honour it as the override.
+    setMethodOverride(params.method ?? null);
     setPrefilled(true);
     setSearchParams({}, { replace: true });
     // Run once on mount only; deliberately ignore later param/setter changes.
@@ -263,7 +265,7 @@ export function SendPage() {
                     setMethodOverride(null);
                   }}
                   error={resolution.state === 'invalid' ? resolution.message : null}
-                  hint="Shared with you directly by the recipient — no lookup needed."
+                  hint="Shared with you directly by the recipient — no lookup needed. Delivers via pool unless you opened a pay-link."
                   className="[&>label]:sr-only"
                 />
               )}

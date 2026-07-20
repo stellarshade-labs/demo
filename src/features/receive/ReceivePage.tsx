@@ -87,6 +87,7 @@ export function ReceivePage() {
         to: metaAddress,
         amount: requestAmount.trim() || undefined,
         asset: assetParam,
+        method: settings.receiveMethod,
       })
     : '';
 
