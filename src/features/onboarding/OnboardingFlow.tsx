@@ -10,6 +10,7 @@ import {
   KeyRound,
   Lock,
   ShieldCheck,
+  Upload,
   Wallet,
 } from 'lucide-react';
 import { useWallet } from '@/wallet/WalletProvider';
@@ -152,13 +153,16 @@ export function CreateStep({
   /** `imported` is true only when restoring a phrase the user already had. */
   onCreated: (imported: boolean) => void;
 }) {
-  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic'>('choose');
+  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic' | 'import'>('choose');
 
   if (mode === 'wallet') {
     return <WalletCreate identity={identity} onBack={() => setMode('choose')} onCreated={onCreated} />;
   }
   if (mode === 'mnemonic') {
     return <MnemonicCreate identity={identity} onBack={() => setMode('choose')} onCreated={onCreated} />;
+  }
+  if (mode === 'import') {
+    return <ImportBackup identity={identity} onBack={() => setMode('choose')} onCreated={onCreated} />;
   }
 
   return (
@@ -192,6 +196,14 @@ export function CreateStep({
           }}
         />
       </div>
+
+      <button
+        type="button"
+        onClick={() => setMode('import')}
+        className="mt-4 w-full text-center text-[13px] text-ink-400 underline decoration-ink-600 underline-offset-2 hover:text-copper-400"
+      >
+        Already have a backup file? Recover an identity
+      </button>
 
       {identity.error && (
         <div className="mt-4">
@@ -364,6 +376,77 @@ function MnemonicCreate({
             </div>
           </>
         )}
+
+        {identity.error && <Notice tone="warn">{identity.error}</Notice>}
+      </div>
+    </div>
+  );
+}
+
+function ImportBackup({
+  identity,
+  onBack,
+  onCreated,
+}: {
+  identity: IdentityApi;
+  onBack: () => void;
+  onCreated: (imported: boolean) => void;
+}) {
+  const [json, setJson] = useState('');
+  const [fileName, setFileName] = useState<string | null>(null);
+
+  const submit = async (raw: string) => {
+    if (await identity.createFromBackup(raw)) onCreated(true);
+  };
+
+  return (
+    <div>
+      <BackLink onClick={onBack} />
+      <h2 className="text-xl font-bold tracking-tight text-ink-50">Recover from a backup</h2>
+      <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
+        Import the JSON backup file Shade exported. This restores any identity — including a random
+        one, which has no recovery phrase to type.
+      </p>
+
+      <div className="mt-6 space-y-4">
+        <label className="flex cursor-pointer items-center justify-center gap-2 border border-dashed border-ink-600 bg-ink-900 px-4 py-6 text-[13px] text-ink-300 transition-colors hover:border-copper-500/60 hover:text-ink-100">
+          <Upload className="size-4" />
+          {fileName ?? 'Choose backup file (.json)'}
+          <input
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setFileName(file.name);
+              const text = await file.text();
+              setJson(text);
+              await submit(text);
+            }}
+          />
+        </label>
+
+        <div className="text-center text-xs text-ink-600">or paste its contents</div>
+
+        <textarea
+          value={json}
+          onChange={(e) => setJson(e.target.value)}
+          placeholder='{ "app": "Shade", "stealthKeys": { … } }'
+          spellCheck={false}
+          className="h-24 w-full resize-none border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-xs text-ink-100 placeholder:text-ink-600 focus:border-copper-500 focus:outline-none"
+        />
+
+        <Button
+          variant="primary"
+          className="w-full"
+          loading={identity.creating}
+          disabled={!json.trim()}
+          icon={<ArrowRight className="size-4" />}
+          onClick={() => void submit(json)}
+        >
+          Recover identity
+        </Button>
 
         {identity.error && <Notice tone="warn">{identity.error}</Notice>}
       </div>

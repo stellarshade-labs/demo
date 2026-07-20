@@ -93,6 +93,8 @@ interface IdentityContextValue {
   createFromWallet: () => Promise<SecretIdentity | null>;
   createFromMnemonic: (phrase?: string) => Promise<SecretIdentity | null>;
   createRandom: () => Promise<SecretIdentity | null>;
+  /** Recover any identity (incl. random) from its exported backup JSON. */
+  createFromBackup: (rawJson: string) => Promise<SecretIdentity | null>;
   discardDraft: () => void;
   /** First-run: create the vault with the first identity under a passphrase. */
   finalize: (passphrase: string, publishPref: boolean) => Promise<void>;
@@ -376,6 +378,66 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     }
   }, [address, canDeriveKeys, signMessage, buildDraft]);
 
+  /**
+   * Recover an identity from the backup file Shade exported. This is how a
+   * RANDOM identity (which has no recovery phrase) is restored — the file holds
+   * the raw keys and the payout account. Works for any source.
+   */
+  const createFromBackup = useCallback(async (rawJson: string) => {
+    setCreating(true);
+    setError(null);
+    try {
+      const b = JSON.parse(rawJson) as {
+        source?: string;
+        mnemonic?: string;
+        metaAddress?: string;
+        stealthKeys?: {
+          spendPubKey?: string;
+          spendPrivKey?: string;
+          viewPubKey?: string;
+          viewPrivKey?: string;
+        };
+        payout?: { publicKey?: string; secret?: string };
+      };
+      const sk = b.stealthKeys ?? {};
+      if (
+        !b.metaAddress ||
+        !sk.spendPubKey ||
+        !sk.spendPrivKey ||
+        !sk.viewPubKey ||
+        !sk.viewPrivKey ||
+        !b.payout?.publicKey
+      ) {
+        throw new Error('missing keys');
+      }
+      const source: IdentitySource =
+        b.source === 'wallet' || b.source === 'mnemonic' || b.source === 'random'
+          ? b.source
+          : 'random';
+      const next: SecretIdentity = {
+        version: 1,
+        id: newIdentityId(),
+        source,
+        stealthKeys: {
+          metaAddress: b.metaAddress,
+          spendPubKey: sk.spendPubKey,
+          spendPrivKey: sk.spendPrivKey,
+          viewPubKey: sk.viewPubKey,
+          viewPrivKey: sk.viewPrivKey,
+        },
+        mnemonic: b.mnemonic,
+        payout: { publicKey: b.payout.publicKey, secret: b.payout.secret },
+      };
+      setDraft(next);
+      return next;
+    } catch {
+      setError('Could not read that backup. Use the JSON backup file Shade exported.');
+      return null;
+    } finally {
+      setCreating(false);
+    }
+  }, []);
+
   const discardDraft = useCallback(() => {
     setDraft(null);
     setError(null);
@@ -636,6 +698,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       createFromWallet,
       createFromMnemonic,
       createRandom,
+      createFromBackup,
       discardDraft,
       finalize,
       addIdentity,
@@ -667,6 +730,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       createFromWallet,
       createFromMnemonic,
       createRandom,
+      createFromBackup,
       discardDraft,
       finalize,
       addIdentity,
