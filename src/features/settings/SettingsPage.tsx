@@ -28,6 +28,8 @@ import { downloadBackup } from '@/identity/backup';
 import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
 import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { useTour } from '@/features/tutorial/TourProvider';
+import { ContactsSettings } from '@/contacts/ContactsSettings';
+import { NotificationsSettings } from '@/notifications/NotificationsSettings';
 import { truncateMeta } from '@/lib/format';
 import { buildViewExport } from '@/lib/viewExport';
 import { isWebAuthnAvailable, isPlatformAuthenticatorAvailable } from '@/lib/webauthn';
@@ -212,8 +214,8 @@ export function SettingsPage() {
       </Panel>
 
       {/* Insertion points for sibling agents' settings sections. */}
-      {/* INSERT: ContactsSettings */}
-      {/* INSERT: NotificationsSettings */}
+      <ContactsSettings />
+      <NotificationsSettings />
 
       {/* Backup & security -------------------------------------------------- */}
       <Panel eyebrow="Security" title="Backup & identity">

@@ -13,6 +13,8 @@ import { HistoryPage } from '@/features/history/HistoryPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { DemoPage } from '@/features/demo/DemoPage';
 import { WatchOnlyPage } from '@/features/view/WatchOnlyPage';
+import { ScanProvider } from '@/stealth/ScanProvider';
+import { NotificationHost } from '@/notifications/NotificationHost';
 
 export function App() {
   return (
@@ -57,17 +59,23 @@ function Gate() {
     return <UnlockScreen />;
   }
 
+  // One app-wide scan engine (feeds Receive, notifications, and auto-claim) plus
+  // the invisible notification/auto-claim host, live for the whole unlocked app
+  // so payments are detected on any page — not only on Receive.
   return (
-    <AppShell>
-      <Routes>
-        <Route path="/" element={<Navigate to="/send" replace />} />
-        <Route path="/send" element={<SendPage />} />
-        <Route path="/receive" element={<ReceivePage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/demo" element={<DemoPage />} />
-        <Route path="*" element={<Navigate to="/send" replace />} />
-      </Routes>
-    </AppShell>
+    <ScanProvider>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<Navigate to="/send" replace />} />
+          <Route path="/send" element={<SendPage />} />
+          <Route path="/receive" element={<ReceivePage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/demo" element={<DemoPage />} />
+          <Route path="*" element={<Navigate to="/send" replace />} />
+        </Routes>
+      </AppShell>
+      <NotificationHost />
+    </ScanProvider>
   );
 }
