@@ -11,12 +11,19 @@ import { useIdentity } from '@/identity/IdentityProvider';
 import { useIdentityStore } from '@/identity/identityStore';
 import { useSession } from '@/store/session';
 import { Button } from '@/components/ui/Button';
-import { EmptyState, Skeleton, TxResult } from '@/components/ui/Status';
-import type { useScan } from '@/stealth/useScan';
+import { EmptyState, Notice, Skeleton, TxResult } from '@/components/ui/Status';
+import { useScanContext } from '@/stealth/ScanProvider';
 
-type ScanApi = ReturnType<typeof useScan>;
+/** Progress of an in-flight "Claim all" run. */
+interface ClaimAllProgress {
+  done: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+}
 
-export function ClaimList({ scan }: { scan: ScanApi }) {
+export function ClaimList() {
+  const scan = useScanContext();
   const { signTransaction } = useWallet();
   const { keys, payoutAddress, payoutSecret } = useIdentity();
   const useRelayerByDefault = useIdentityStore((s) => s.settings.useRelayerByDefault);
@@ -25,6 +32,11 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
 
   const health = useServiceHealth();
   const [claiming, setClaiming] = useState<string | null>(null);
+  const [claimingAll, setClaimingAll] = useState(false);
+  // Claiming everything at once is the most deanonymizing action here, so the
+  // Claim-all button opens an inline privacy warning first rather than running.
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  const [progress, setProgress] = useState<ClaimAllProgress | null>(null);
   const [relayerOptIn, setRelayerOptIn] = useState(useRelayerByDefault);
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
@@ -42,10 +54,11 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
 
   const available = scan.payments.filter((p) => !scan.claimed.has(p.stealthAddress));
 
-  const handleClaim = async (payment: Payment) => {
-    if (!keys || !payoutAddress) return;
-    setClaiming(payment.stealthAddress);
-    setResult(null);
+  // The single claim path, shared by the per-row button and "Claim all". Marks
+  // the payment claimed and records the tx on success; returns whether it worked
+  // so the batch runner can tally results without racing on shared UI state.
+  const claimOne = async (payment: Payment): Promise<boolean> => {
+    if (!keys || !payoutAddress) return false;
 
     const txId = addTx({
       kind: 'claim',
@@ -74,20 +87,73 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
       });
 
       updateTx(txId, { status: 'success', txHash: receipt.txHash });
-      setResult({
-        status: 'success',
-        message: `Claimed ${formatAmount(receipt.amount)} ${assetLabel(payment)} to your account.`,
-        txHash: receipt.txHash,
-      });
       scan.markClaimed(payment.stealthAddress);
+      return true;
     } catch (err) {
       const message = toUserMessage(err);
       updateTx(txId, { status: 'error', error: message });
-      setResult({ status: 'error', message });
+      // Bubble the message up for the single-claim path.
+      throw new Error(message);
+    }
+  };
+
+  const handleClaim = async (payment: Payment) => {
+    if (!keys || !payoutAddress) return;
+    setClaiming(payment.stealthAddress);
+    setResult(null);
+    try {
+      await claimOne(payment);
+      setResult({
+        status: 'success',
+        message: `Claimed ${formatAmount(payment.amount)} ${assetLabel(payment)} to your account.`,
+      });
+    } catch (err) {
+      setResult({ status: 'error', message: toUserMessage(err) });
     } finally {
       setClaiming(null);
     }
   };
+
+  const handleClaimAll = async () => {
+    if (!keys || !payoutAddress) return;
+    // Snapshot now: `available` recomputes as each claim marks its payment, and
+    // we want a stable batch to walk sequentially.
+    const batch = [...available];
+    if (batch.length === 0) return;
+
+    setConfirmingAll(false);
+    setClaimingAll(true);
+    setResult(null);
+    setProgress({ done: 0, total: batch.length, succeeded: 0, failed: 0 });
+
+    let succeeded = 0;
+    let failed = 0;
+    for (let i = 0; i < batch.length; i++) {
+      try {
+        await claimOne(batch[i]);
+        succeeded += 1;
+      } catch {
+        failed += 1;
+      }
+      setProgress({ done: i + 1, total: batch.length, succeeded, failed });
+    }
+
+    setClaimingAll(false);
+    setProgress(null);
+    setResult(
+      failed === 0
+        ? {
+            status: 'success',
+            message: `Claimed all ${succeeded} payment${succeeded === 1 ? '' : 's'} to your account.`,
+          }
+        : {
+            status: succeeded > 0 ? 'success' : 'error',
+            message: `Claimed ${succeeded} of ${batch.length}; ${failed} failed. You can retry the rest.`,
+          },
+    );
+  };
+
+  const busyAny = claiming !== null || claimingAll;
 
   if (scan.cold && scan.payments.length === 0) {
     return (
@@ -125,37 +191,92 @@ export function ClaimList({ scan }: { scan: ScanApi }) {
           description="Payments sent to your meta-address will appear here once the ledger closes. Share your meta-address or publish it to get started."
         />
       ) : (
-        <ul className="divide-y divide-ink-700">
-          {available.map((payment) => {
-            const busy = claiming === payment.stealthAddress;
-            return (
-              <li
-                key={`${payment.stealthAddress}:${payment.token}`}
-                className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-ink-800/40"
-              >
-                <ShieldCheck className="size-4 shrink-0 text-copper-500" />
-                <div className="min-w-0 flex-1">
-                  <div className="font-mono text-sm font-medium text-ink-50">
-                    {formatAmount(payment.amount)}{' '}
-                    <span className="text-ink-400">{assetLabel(payment)}</span>
-                  </div>
-                  <div className="mt-0.5 truncate font-mono text-xs text-ink-500">
-                    at {truncate(payment.stealthAddress, 8, 6)}
-                  </div>
-                </div>
+        <>
+          {available.length > 1 && (
+            <div className="border-b border-ink-700">
+              <div className="flex items-center justify-between gap-3 px-5 py-3">
+                <span className="text-[13px] text-ink-400">
+                  {claimingAll && progress
+                    ? `Claiming ${progress.done}/${progress.total}…`
+                    : `${available.length} payments waiting`}
+                </span>
                 <Button
                   size="sm"
                   variant="primary"
-                  loading={busy}
-                  disabled={claiming !== null && !busy}
-                  onClick={() => handleClaim(payment)}
+                  loading={claimingAll}
+                  disabled={busyAny}
+                  onClick={() => setConfirmingAll(true)}
                 >
-                  Claim
+                  Claim all
                 </Button>
-              </li>
-            );
-          })}
-        </ul>
+              </div>
+
+              {confirmingAll && !claimingAll && (
+                <div className="px-5 pb-4">
+                  <Notice tone="warn">
+                    <p className="font-medium text-signal-wait">Claiming all at once reduces your privacy.</p>
+                    <p className="mt-1.5 text-ink-300">
+                      Claiming links these payments to your account, and doing them together lets an
+                      on-chain observer group them as yours by their shared timing. For better
+                      privacy, claim separately and spread them over time.
+                    </p>
+                    <p className="mt-1.5 text-ink-300">
+                      {relayerAvailable
+                        ? useRelayer
+                          ? 'Submit through relayer is on, which hides your IP and fee-payer link — good.'
+                          : 'Consider enabling Submit through relayer below first: it hides your IP and the fee-payer link.'
+                        : 'The relayer, which would hide your IP and fee-payer link, is unavailable right now.'}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setConfirmingAll(false)}>
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        disabled={busyAny}
+                        onClick={handleClaimAll}
+                      >
+                        Claim all anyway
+                      </Button>
+                    </div>
+                  </Notice>
+                </div>
+              )}
+            </div>
+          )}
+          <ul className="divide-y divide-ink-700">
+            {available.map((payment) => {
+              const busy = claiming === payment.stealthAddress;
+              return (
+                <li
+                  key={`${payment.stealthAddress}:${payment.token}`}
+                  className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-ink-800/40"
+                >
+                  <ShieldCheck className="size-4 shrink-0 text-copper-500" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-mono text-sm font-medium text-ink-50">
+                      {formatAmount(payment.amount)}{' '}
+                      <span className="text-ink-400">{assetLabel(payment)}</span>
+                    </div>
+                    <div className="mt-0.5 truncate font-mono text-xs text-ink-500">
+                      at {truncate(payment.stealthAddress, 8, 6)}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    loading={busy}
+                    disabled={busyAny && !busy}
+                    onClick={() => handleClaim(payment)}
+                  >
+                    Claim
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 px-5 py-3">

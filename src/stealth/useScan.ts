@@ -21,14 +21,23 @@ export interface ScanState {
   cold: boolean;
   error: string | null;
   lastSyncedAt: number | null;
+  /** Payments newly detected in the most recent completed scan (diff vs prior). */
+  lastNewPayments: Payment[];
+  /** Increments after each completed scan, so consumers can react to fresh data. */
+  scanTick: number;
+}
+
+/** The identity key of a payment: one-time address + its asset/token. */
+function paymentKey(payment: Payment): string {
+  // A stealth address is one-time, but the pool can hold several assets at
+  // one, so key on both.
+  return `${payment.stealthAddress}:${payment.token}`;
 }
 
 function dedupe(existing: Payment[], incoming: Payment[]): Payment[] {
   const seen = new Map<string, Payment>();
   for (const payment of [...existing, ...incoming]) {
-    // A stealth address is one-time, but the pool can hold several assets at
-    // one, so key on both.
-    seen.set(`${payment.stealthAddress}:${payment.token}`, payment);
+    seen.set(paymentKey(payment), payment);
   }
   return [...seen.values()];
 }
@@ -36,9 +45,10 @@ function dedupe(existing: Payment[], incoming: Payment[]): Payment[] {
 export function useScan(
   address: string | null,
   keys: StealthKeys | null,
-  opts?: { auto?: boolean },
+  opts?: { auto?: boolean; pollIntervalMs?: number },
 ) {
   const auto = opts?.auto ?? true;
+  const pollIntervalMs = opts?.pollIntervalMs ?? 0;
   const [state, setState] = useState<ScanState>({
     payments: [],
     claimed: new Set(),
@@ -47,6 +57,8 @@ export function useScan(
     cold: false,
     error: null,
     lastSyncedAt: null,
+    lastNewPayments: [],
+    scanTick: 0,
   });
 
   const inFlight = useRef(false);
@@ -81,6 +93,12 @@ export function useScan(
             ? result.payments
             : dedupe(prev.payments, result.payments);
           const claimed = opts?.fromScratch ? new Set<string>() : prev.claimed;
+          // What's genuinely new this scan: keys present now but not before. On a
+          // from-scratch scan the prior set is discarded, so everything is "new".
+          const known = new Set(
+            (opts?.fromScratch ? [] : prev.payments).map(paymentKey),
+          );
+          const lastNewPayments = payments.filter((p) => !known.has(paymentKey(p)));
           const next: ScanState = {
             payments,
             claimed,
@@ -89,6 +107,8 @@ export function useScan(
             cold: false,
             error: null,
             lastSyncedAt: Date.now(),
+            lastNewPayments,
+            scanTick: prev.scanTick + 1,
           };
           void persist({
             payments,
@@ -143,6 +163,8 @@ export function useScan(
         cold: false,
         error: null,
         lastSyncedAt: null,
+        lastNewPayments: [],
+        scanTick: 0,
       });
       return;
     }
@@ -175,6 +197,19 @@ export function useScan(
     // effect on every cursor update would restart hydration in a loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys, address]);
+
+  // Keep the latest `scan` reachable from a stable interval, so the poll below
+  // never resets its timer just because the cursor advanced.
+  const scanRef = useRef(scan);
+  scanRef.current = scan;
+
+  // Periodically re-scan so new payments are detected app-wide without the user
+  // clicking Rescan. Idle when disabled or when there is no identity to scan.
+  useEffect(() => {
+    if (pollIntervalMs <= 0 || !keys || !address) return;
+    const timer = setInterval(() => void scanRef.current(), pollIntervalMs);
+    return () => clearInterval(timer);
+  }, [pollIntervalMs, keys, address]);
 
   return { ...state, scan, markClaimed };
 }
