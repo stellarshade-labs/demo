@@ -1,47 +1,66 @@
 # Shade Demo
 
-A demo dapp for the [Shade](https://www.npmjs.com/package/stellar-shade) protocol — stealth
-addresses and unlinkable transfers on Stellar testnet.
+A reference dapp for the [Shade](https://www.npmjs.com/package/stellar-shade) protocol —
+stealth addresses and unlinkable transfers on Stellar.
 
-Send XLM to someone without anything on-chain linking the payment to their account. The sender
-either types the recipient's ordinary Stellar address or pastes their stealth meta-address; both
-paths derive a fresh one-time address that only the recipient can spend from.
+Funds are sent to a fresh one-time address derived per transfer, so nothing on-chain links a payment
+to the recipient's account. Senders can address a recipient either by their ordinary Stellar public
+key or by their stealth meta-address; both paths converge on the same transfer.
 
-> The Shade protocol's cryptography is pending external audit. This is a testnet demo — do not use
-> it with real value.
+> [!WARNING]
+> Runs on Stellar **testnet**. The Shade protocol's cryptography is pending external audit — do not
+> use it with real value.
 
----
+## Contents
 
-## Quick start
+- [Requirements](#requirements)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Meta-address resolution](#meta-address-resolution)
+- [Data persistence](#data-persistence)
+- [Architecture](#architecture)
+- [SDK compatibility notes](#sdk-compatibility-notes)
+- [Walkthrough](#walkthrough)
+- [Tech stack](#tech-stack)
+
+## Requirements
+
+- Node.js 18 or newer
+- A Stellar wallet browser extension — [Freighter](https://www.freighter.app/) is recommended and is
+  the only wallet that supports receiving (see [Wallet support](#wallet-support))
+
+## Getting started
 
 ```bash
+git clone https://github.com/stellarshade-labs/demo.git
+cd demo
 npm install
 cp .env.example .env
 npm run dev
 ```
 
-Open http://localhost:5173 and connect [Freighter](https://www.freighter.app/) set to **Testnet**.
-Fund your account from [friendbot](https://friendbot.stellar.org) if it is new.
+Vite prints the local development URL on startup. Open it, then connect your wallet with the network
+set to **Testnet**. New accounts can be funded from [Friendbot](https://friendbot.stellar.org).
 
-| Script            | What it does                          |
-| ----------------- | ------------------------------------- |
-| `npm run dev`     | Dev server with HMR                   |
-| `npm run build`   | Typecheck and build to `dist/`        |
-| `npm run preview` | Serve the production build            |
-| `npm run typecheck` | Types only, no emit                 |
+### Scripts
 
----
+| Script              | Description                              |
+| ------------------- | ---------------------------------------- |
+| `npm run dev`       | Start the development server with HMR    |
+| `npm run build`     | Type-check and build to `dist/`          |
+| `npm run preview`   | Serve the production build locally       |
+| `npm run typecheck` | Type-check only, no output               |
 
 ## Configuration
 
-Everything network-related comes from the environment; nothing is hardcoded. Copy `.env.example`
-to `.env`:
+All network configuration is supplied through environment variables; no endpoint or contract
+identifier is hardcoded in application code. Copy `.env.example` to `.env` and adjust as needed:
 
 ```env
 VITE_STELLAR_NETWORK=testnet
 VITE_NETWORK_PASSPHRASE=Test SDF Network ; September 2015
 
-# Shade stealth pool contract (Soroban, testnet)
+# Shade stealth pool contract (Soroban)
 VITE_SHADE_CONTRACT_ID=CDQBZZ5B2GUE7RG6NDWLZYE7TLSQAEZODGRO565GKAHN73C2SGVG76BX
 
 # Shade services
@@ -52,151 +71,158 @@ VITE_INDEXER_URL=https://shadeindexer-production.up.railway.app
 VITE_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 VITE_HORIZON_URL=https://horizon-testnet.stellar.org
 
-# Account data-entry key used to publish a meta-address (see below)
+# Account data-entry key used to publish a meta-address
 VITE_META_DATA_KEY=shade:meta
 ```
 
-`src/config/network.ts` reads these once and throws on startup if any are missing.
+`src/config/network.ts` validates these at startup and fails fast if any are missing.
 
----
+## Meta-address resolution
 
-## Meta-address resolution — why this app adds a piece
+Addressing a recipient by their ordinary `G...` public key requires a resolution step that the Shade
+SDK does not provide, and cannot: a meta-address is derived from the recipient's wallet *signature*,
+so it is not computable from their public key. Were it computable, their spend and view private keys
+would be derivable too. The pool contract holds no registry, and the indexer exposes only `/health`
+and `/announcements`.
 
-The brief asked for a default flow where the sender simply enters the recipient's **public Stellar
-address**. The SDK has no such call, and it cannot: a meta-address is derived from the recipient's
-wallet *signature*, so it is not computable from their `G...` key. If it were, anyone could derive
-their spend and view private keys too. The pool contract has no registry either, and the indexer
-exposes only `/health` and `/announcements`.
+This application supplies that layer using a native Stellar primitive, with no backend service.
 
-So this demo supplies the missing resolution layer, Stellar-natively, with **no backend**:
-
-**Publishing** (Receive tab) writes a `manageData` entry on the recipient's own account:
+**Publishing.** From the Receive view, the recipient writes a `manageData` entry to their own
+account:
 
 ```
 key   = shade:meta
-value = spendPubKey (32 bytes) || viewPubKey (32 bytes)   = exactly 64 bytes
+value = spendPubKey (32 bytes) || viewPubKey (32 bytes)   = 64 bytes
 ```
 
-64 bytes is precisely Stellar's data-entry value limit, so the payload fits without truncation. The
-meta-address's 4-byte checksum is a function of the payload, so it is recomputed on read rather than
-stored. Creating the entry raises the account's base reserve by 0.5 XLM, refunded if it is removed.
+64 bytes is exactly Stellar's data-entry value limit, so the payload fits without truncation. The
+meta-address checksum is a function of the payload and is recomputed on read rather than stored.
+Creating the entry raises the account's base reserve by 0.5 XLM, released if the entry is removed.
 
-**Resolving** (Send tab, "Public address") loads the account from Horizon, reads that data entry,
-and rebuilds the meta-address string. If the account has not published one, the UI says so and
-points the sender at the Meta-address tab.
+**Resolving.** From the Send view, the application loads the account from Horizon, reads the data
+entry, and reconstructs the meta-address. Accounts that have not published one are reported clearly,
+with the meta-address input offered as the alternative.
 
-Both tabs then converge on the same `stealthClient.send(metaAddress, …)` call — the public tab has
-simply looked up what the meta-address tab was given directly.
+Both input modes then call `stealthClient.send(metaAddress, …)` identically — the public-key mode has
+simply looked up what the meta-address mode was given directly.
 
-Publishing is public, on-chain, and opt-in. It says only "this account accepts stealth payments at
-this meta-address"; it reveals nothing about which stealth addresses that account later receives at.
+Publishing is opt-in and public. The entry asserts only that an account accepts stealth payments at a
+given meta-address; it reveals nothing about the stealth addresses that account subsequently
+receives at.
 
-Implementation: `src/lib/metaRegistry.ts`. Verified byte-exact against the SDK's own encoder.
+Implementation: `src/lib/metaRegistry.ts`, verified byte-exact against the SDK's own encoder.
 
----
+## Data persistence
 
-## What is stored where
+Session state survives page reloads and browser restarts, tiered by sensitivity:
 
-Session state survives a page refresh and a browser restart, in three tiers by sensitivity:
+| Data                                        | Storage                         | After a reload                        |
+| ------------------------------------------- | ------------------------------- | ------------------------------------- |
+| Connected address, wallet, UI preferences   | `localStorage`, plaintext       | Restored immediately, auto-reconnect  |
+| Send / claim / publish history              | `localStorage`, plaintext       | Restored immediately                  |
+| Detected payments and scan cursor           | `localStorage`, **AES-256-GCM** | One signature to unlock, then instant |
+| Stealth spend and view private keys         | **Not persisted** — memory only | Re-derived from a wallet signature    |
 
-| Data                                          | Storage                       | After a refresh                     |
-| --------------------------------------------- | ----------------------------- | ----------------------------------- |
-| Connected address, wallet id, UI preferences   | `localStorage`, plain         | Restored instantly, auto-reconnect  |
-| Sent/claim/publish transaction history         | `localStorage`, plain         | Restored instantly                  |
-| Detected incoming payments + scan cursor       | `localStorage`, **AES-256-GCM** | One signature to unlock, then instant |
-| Stealth spend & view private keys              | **Nowhere** — memory only     | Re-derived from a wallet signature  |
-
-Private keys are never persisted in any form. Detected payments *are* cached, because each one links
-a one-time stealth address to your identity — exactly the correlation the protocol exists to hide —
-so the cache is sealed with a key derived via HKDF from your view key under a dedicated info tag.
-Losing or failing to decrypt it is harmless: the chain is always the source of truth and the app
-just rescans. Disconnecting wipes it.
+Private keys are never written to storage in any form. Detected payments are cached because
+rescanning is slow, but each record links a one-time stealth address to an identity — precisely the
+correlation the protocol exists to break — so the cache is sealed with a key derived via HKDF from
+the view key under a dedicated info tag. A cache that cannot be decrypted is discarded and rebuilt:
+the chain remains the source of truth. Disconnecting clears it.
 
 See `src/stealth/scanCache.ts` and `src/store/session.ts`.
-
----
 
 ## Architecture
 
 ```
 src/
-  config/network.ts        Env-driven network config, explorer links
+  config/network.ts          Environment-driven network config, explorer links
   lib/
-    fetchShim.ts           Binds global fetch (see "Notes on the SDK")
-    shade.ts               StealthClient / RelayerClient / IndexerClient singletons
-    metaRegistry.ts        manageData publish + resolve
-    errors.ts              ShadeError.code -> human message
-    format.ts              Address truncation, amounts, relative time
-    useServiceHealth.ts    Relayer + indexer liveness polling
+    fetchShim.ts             Global fetch binding (see SDK compatibility notes)
+    shade.ts                 StealthClient / RelayerClient / IndexerClient instances
+    metaRegistry.ts          manageData publish and resolve
+    errors.ts                ShadeError codes mapped to user-facing messages
+    format.ts                Address truncation, amounts, relative time
+    useServiceHealth.ts      Relayer and indexer liveness polling
   wallet/
-    types.ts               WalletConnector interface
-    connectors/            freighter, xbull, albedo
-    WalletProvider.tsx     Connect, silent auto-reconnect, signer adapters
+    types.ts                 WalletConnector interface
+    connectors/              Freighter, xBull, Albedo
+    WalletProvider.tsx       Connection, auto-reconnect, signer adapters
+    useAvailability.ts       Extension detection tolerant of late injection
   stealth/
-    StealthKeysProvider.tsx  keysFromWalletSignature, memory only
-    useScan.ts               Incremental scan with cursor
+    StealthKeysProvider.tsx  Key derivation, held in memory only
+    useScan.ts               Incremental scanning with cursor
     scanCache.ts             Encrypted payment cache
-  store/session.ts         Zustand + persist
-  components/              layout, wallet, ui primitives
-  features/                send, receive, history
+  store/session.ts           Zustand with persistence
+  components/                Layout, wallet, and UI primitives
+  features/                  Send, receive, history
 ```
 
-**Wallets.** A connector interface after the `soroban-react` pattern; the provider only ever talks
-to that interface. Freighter is fully supported. xBull and Albedo can *send* but cannot derive
-stealth keys — neither exposes raw message signing in the form `keysFromWalletSignature` needs — and
-the UI says so at connect time rather than failing later.
+### Wallet support
 
-**Signing.** The SDK signs stealth-key legs internally (a wallet cannot hold a derived stealth
-scalar) and delegates the sender and fee-payer legs to a `TransactionSigner` callback. Where a
-secret key would normally go, the app passes a **public** `G...` address instead: `send()`'s third
-argument, and `ClaimOpts.feePayerAddress` on claims.
+Wallets are integrated through a connector interface modelled on the `soroban-react` pattern; the
+provider only ever talks to that interface, so adding a wallet means adding one module.
 
----
+| Wallet    | Send | Receive | Notes                                            |
+| --------- | :--: | :-----: | ------------------------------------------------ |
+| Freighter |  ✓   |    ✓    | Full support                                     |
+| xBull     |  ✓   |    —    | No raw message signing for key derivation        |
+| Albedo    |  ✓   |    —    | No raw message signing for key derivation        |
 
-## Notes on the SDK
+Receiving requires deriving stealth keys from a signed message. Wallets that cannot do so are
+labelled at connect time rather than failing later in the flow.
 
-Two things this app works around, worth knowing if you build on `stellar-shade@0.1.0`:
+### Signing model
 
-1. **`fetch` binding.** The SDK stores `globalThis.fetch` on an instance and calls it as
-   `this.fetchFn(url)`. Browsers require `fetch` to be invoked with `window` as receiver, so this
-   throws `Illegal invocation` and surfaces as a generic network error — every relayer and indexer
-   call fails without a request ever leaving the page. `src/lib/fetchShim.ts` rebinds the global
-   before any client is constructed. A per-client `fetchFn` is not enough: `StealthClient` builds
-   its own `HorizonClient` and `IndexerClient` internally.
+The SDK signs stealth-key legs internally, since a wallet cannot hold a derived stealth scalar, and
+delegates the sender and fee-payer legs to a `TransactionSigner` callback. Where a secret key would
+normally be passed, the application supplies a **public** `G...` address instead: the third argument
+to `send()`, and `ClaimOpts.feePayerAddress` on claims.
 
-2. **Constructor-level relayer is a silent fallback.** Setting `relayer` in `ClientConfig` makes
-   every claim resolve `opts.relay ?? this.relayer`, so relaying cannot be turned off per call. The
-   configured relayer is credit-gated (`requireCredit: true`) and this demo carries no funding
-   account, so claims would fail with no user-visible opt-out. `src/lib/shade.ts` therefore omits it
-   and passes `relay` explicitly from the UI, which disables the toggle when the relayer reports a
-   credit gate.
+## SDK compatibility notes
 
-Also note `Buffer` is referenced unguarded throughout the SDK and the package ships no `browser`
-field, so `vite-plugin-node-polyfills` is required in both dev and production builds.
+Two behaviours in `stellar-shade@0.1.0` require handling in browser applications:
 
----
+**1. Global `fetch` binding.** The SDK assigns `globalThis.fetch` to an instance property and invokes
+it as `this.fetchFn(url)`. Browsers require `fetch` to be called with `window` as its receiver, so
+this raises `Illegal invocation`, surfacing as a generic network error while no request ever leaves
+the page. `src/lib/fetchShim.ts` rebinds the global before any client is constructed. Supplying a
+per-client `fetchFn` is insufficient, because `StealthClient` constructs its own `HorizonClient` and
+`IndexerClient` internally.
 
-## Trying it end to end
+**2. Constructor-level relayer acts as a silent fallback.** Setting `relayer` in `ClientConfig`
+causes every claim to resolve `opts.relay ?? this.relayer`, leaving no way to disable relaying per
+call. Because the configured relayer is credit-gated (`requireCredit: true`) and this application
+carries no funding account, claims would fail with no user-visible opt-out. `src/lib/shade.ts`
+therefore omits it and passes `relay` explicitly from the UI, which disables the option when the
+relayer reports a credit gate.
 
-You will want two testnet accounts (two Freighter profiles, or two browsers).
+Additionally, the SDK references `Buffer` unguarded and publishes no `browser` field, so
+`vite-plugin-node-polyfills` is required for both development and production builds.
 
-1. **Receive**, as the recipient: connect, *Sign to unlock*, then *Publish meta-address*. Confirm the
+## Walkthrough
+
+Exercising the full flow requires two testnet accounts — two wallet profiles, or two browsers.
+
+1. **Receive** (recipient): connect, choose *Sign to unlock*, then *Publish meta-address*. Verify the
    entry landed:
-   `curl https://horizon-testnet.stellar.org/accounts/<G...> | jq .data`
-2. **Send**, as the sender: connect the other account, paste the recipient's `G...` into the Public
-   address tab. It should resolve to a meta-address. Send a small amount.
-3. **Receive** again, as the recipient: the payment appears under *Detected payments*. Claim it — the
-   funds land in the recipient's ordinary account.
-4. **History** shows both sides locally, plus the network-wide announcement feed from the indexer.
-5. Refresh the page: connection and history return immediately; incoming payments return after one
+
+   ```bash
+   curl https://horizon-testnet.stellar.org/accounts/<ACCOUNT_ID> | jq .data
+   ```
+
+2. **Send** (sender): connect the second account and enter the recipient's public key in the
+   *Public address* tab. It resolves to a meta-address. Send a small amount.
+3. **Receive** (recipient): the payment appears under *Detected payments*. Claiming it moves the
+   funds to the recipient's ordinary account.
+4. **History**: shows local activity alongside the network-wide announcement feed from the indexer.
+5. Reload the page: connection and history return immediately; detected payments return after one
    signature.
 
-Inspect any hash on [stellar.expert](https://stellar.expert/explorer/testnet). Nothing there links
-the stealth address back to the recipient's account.
+Any transaction hash can be inspected on
+[stellar.expert](https://stellar.expert/explorer/testnet). Nothing published there links a stealth
+address back to the recipient's account.
 
----
-
-## Stack
+## Tech stack
 
 React 18 · TypeScript · Vite 6 · Tailwind CSS 4 · Zustand · React Router ·
 `stellar-shade` · `@stellar/stellar-sdk` · `@stellar/freighter-api` · lucide-react
