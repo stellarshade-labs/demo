@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+/* Stellarshade brand palette mapped onto Fumadocs variables (dark-only site). */
+:root,
+.dark {
+  --color-fd-background: #0b0c0e;
+  --color-fd-foreground: #f0f2f5;
+  --color-fd-card: #141619;
+  --color-fd-card-foreground: #f0f2f5;
+  --color-fd-popover: #191c21;
+  --color-fd-popover-foreground: #f0f2f5;
+  --color-fd-muted: #141619;
+  --color-fd-muted-foreground: rgba(214, 218, 224, 0.72);
+  --color-fd-border: rgba(240, 242, 245, 0.09);
+  --color-fd-primary: #dd9057;
+  --color-fd-primary-foreground: #0b0c0e;
+  --color-fd-secondary: #191c21;
+  --color-fd-secondary-foreground: #f0f2f5;
+  --color-fd-accent: #191c21;
+  --color-fd-accent-foreground: #f0f2f5;
+  --color-fd-ring: #c8763c;
+}
+
+html {
+  scrollbar-gutter: stable;
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Manrope Variable', system-ui, sans-serif;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}

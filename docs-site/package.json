@@ -1,0 +1,32 @@
+{
+  "name": "shade-docs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "^7.2.1",
+    "@astrojs/mdx": "^7.0.3",
+    "@astrojs/react": "^6.0.1",
+    "@astrojs/sitemap": "^3.7.3",
+    "@fontsource-variable/manrope": "^5.2.8",
+    "@orama/orama": "^3.1.18",
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.1.1",
+    "fumadocs-core": "^16.11.5",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@^16.11.5",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "sharp": "^0.35.3",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "typescript": "^5.9.3"
+  }
+}

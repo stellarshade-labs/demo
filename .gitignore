@@ -8,3 +8,5 @@ dist-ssr
 .vite
 *.tsbuildinfo
 site
+docs-site/node_modules
+docs-site/dist
