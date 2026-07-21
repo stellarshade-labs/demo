@@ -1,0 +1,1057 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shade — Unlinkable payments on Stellar</title>
+<meta name="description" content="Stealth addresses on Stellar. Funds are sent to a fresh one-time address per transfer — nothing on-chain links a payment to you.">
+<meta property="og:title" content="Shade — Unlinkable payments on Stellar">
+<meta property="og:description" content="Every payment draws a line. Shade severs it.">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%230b0c0e"/><g transform="translate(96 96) scale(16)"><rect x="2.5" y="2.5" width="10" height="10" fill="%23c8763c"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="%23c8763c" stroke-width="1.4" opacity="0.55"/></g></svg>'>
+<style>
+/* ————— Shade landing · THE UNLINKING ————— */
+@font-face{
+  font-family:'Archivo';
+  src:url('fonts/archivo-expanded.woff2') format('woff2');
+  font-weight:600 900;font-stretch:125%;font-display:swap;
+}
+@font-face{
+  font-family:'Inter';
+  src:url('fonts/inter.woff2') format('woff2');
+  font-weight:400 700;font-display:swap;
+}
+@font-face{
+  font-family:'JetBrains Mono';
+  src:url('fonts/jetbrains-mono.woff2') format('woff2');
+  font-weight:400 600;font-display:swap;
+}
+:root{
+  --void:#08090b;
+  --ink-950:#0b0c0e; --ink-900:#101216; --ink-850:#141619; --ink-800:#191c21;
+  --ink-700:#232830; --ink-600:#333a45; --ink-400:#6b7480; --ink-300:#8d97a4;
+  --ink-100:#d6dae0; --ink-50:#f0f2f5;
+  --copper-600:#a75c2b; --copper-500:#c8763c; --copper-400:#dd9057; --copper-300:#e8ab7c;
+  --ok:#5f9e73; --bad:#b4553f;
+  --onaccent:#0b0c0e;
+  --display:'Archivo',ui-sans-serif,system-ui,sans-serif;
+  --sans:'Inter',ui-sans-serif,system-ui,sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{color-scheme:dark;scroll-behavior:auto}
+body{
+  background:var(--void);color:var(--ink-100);
+  font-family:var(--sans);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+::selection{background:var(--copper-500);color:var(--onaccent)}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid var(--copper-400);outline-offset:3px;border-radius:2px}
+button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
+
+/* ——— type roles ——— */
+.eyebrow{
+  font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.28em;
+  text-transform:uppercase;color:var(--copper-400);
+}
+.display{
+  font-family:var(--display);font-stretch:125%;font-weight:800;
+  text-transform:uppercase;letter-spacing:-.01em;line-height:.96;color:var(--ink-50);
+}
+.mono{font-family:var(--mono)}
+
+/* ——— header ——— */
+.hdr{
+  position:fixed;inset:0 0 auto 0;z-index:60;height:64px;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 clamp(16px,3vw,36px);
+  background:transparent;border-bottom:1px solid transparent;
+  transition:background .35s ease,border-color .35s ease;
+}
+.hdr.solid{background:rgba(8,9,11,.78);backdrop-filter:blur(10px);border-color:var(--ink-700)}
+.lockup{display:flex;align-items:center;gap:10px}
+.lockup svg{display:block}
+.lockup .word{
+  font-family:var(--display);font-stretch:125%;font-weight:700;font-size:15px;
+  letter-spacing:.14em;color:var(--ink-50);text-transform:uppercase;padding-top:1px;
+}
+.nav{display:flex;align-items:center;gap:clamp(14px,2.4vw,30px)}
+.nav a.lnk{
+  font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-300);transition:color .2s;
+}
+.nav a.lnk:hover{color:var(--ink-50)}
+.gh{color:var(--ink-300);transition:color .2s;display:flex}
+.gh:hover{color:var(--ink-50)}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;
+  font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;padding:10px 18px;border-radius:4px;cursor:pointer;
+  transition:background .2s,color .2s,border-color .2s,transform .15s;
+}
+.btn-copper{background:var(--copper-500);color:var(--onaccent)}
+.btn-copper:hover{background:var(--copper-400)}
+.btn-ghost{border:1px solid var(--ink-600);color:var(--ink-100)}
+.btn-ghost:hover{border-color:var(--copper-500);color:var(--copper-300)}
+.btn-lg{font-size:13px;padding:15px 26px}
+@media(max-width:760px){
+  .nav a.lnk{display:none}
+  #hero .tick-col.c2{display:none}
+  #hero .tick-col.c1,#hero .tick-col.c3{opacity:.16}
+}
+
+/* ——— film scenes ——— */
+.scene{position:relative;height:100vh;height:100svh;overflow:hidden;background:var(--void)}
+.stage{position:absolute;inset:0}
+.lens{position:fixed;inset:0;pointer-events:none;z-index:40;opacity:1}
+.lens .vig{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 45%,transparent 55%,rgba(0,0,0,.38) 100%)}
+.lens .grain{position:absolute;inset:-50%;opacity:.05;
+  background-image:url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2"/></filter><rect width="240" height="240" filter="url(%23n)" opacity="0.6"/></svg>');
+}
+
+/* copy overlays */
+.beat{position:absolute;z-index:8;max-width:min(560px,86vw)}
+.beat h2{font-family:var(--display);font-stretch:125%;font-weight:800;text-transform:uppercase;
+  font-size:clamp(30px,4.6vw,64px);line-height:1.02;letter-spacing:-.01em;color:var(--ink-50);margin-bottom:14px}
+.beat p{color:var(--ink-300);font-size:clamp(14px,1.25vw,17px);max-width:46ch}
+.beat .eyebrow{display:block;margin-bottom:16px}
+.beat-bl{left:clamp(20px,6vw,84px);bottom:clamp(72px,12vh,120px)}
+.beat-c{left:50%;top:50%;transform:translate(-50%,-50%);text-align:center}
+.beat-c p{margin:0 auto}
+
+/* ——— hero ——— */
+#hero .tick-col{position:absolute;top:-6%;width:max-content;will-change:transform}
+#hero .tick-col.c1{left:clamp(8px,4vw,72px);opacity:.3}
+#hero .tick-col.c2{left:50%;transform:translateX(-50%);opacity:.13}
+#hero .tick-col.c3{right:clamp(8px,4vw,72px);opacity:.3}
+.tickrow{
+  font-family:var(--mono);font-size:11.5px;line-height:2.5;white-space:nowrap;color:var(--ink-400);
+}
+.tickrow b{color:var(--ink-300);font-weight:500}
+.tickmask{position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(180deg,var(--void) 0%,transparent 22%,transparent 68%,var(--void) 100%)}
+#hero .core{
+  position:relative;z-index:5;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;padding:0 16px;
+}
+#hero .mark-pulse{margin-bottom:26px}
+.wordmark{
+  font-family:var(--display);font-stretch:125%;font-weight:900;text-transform:uppercase;
+  font-size:clamp(64px,15vw,210px);line-height:.92;letter-spacing:.01em;color:var(--ink-50);
+  display:flex;overflow:hidden;
+}
+.wordmark .ch{display:inline-block;will-change:transform}
+#hero .sub{margin-top:26px;max-width:52ch;color:var(--ink-300);font-size:clamp(15px,1.35vw,18px)}
+#hero .sub b{color:var(--ink-100);font-weight:500}
+#hero .ctas{display:flex;gap:14px;margin-top:34px;flex-wrap:wrap;justify-content:center}
+#hero .cue{
+  position:absolute;bottom:26px;left:50%;transform:translateX(-50%);z-index:5;
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+}
+#hero .cue span{font-family:var(--mono);font-size:10px;letter-spacing:.34em;color:var(--ink-400)}
+#hero .cue i{width:1px;height:44px;background:var(--ink-600);display:block;position:relative;overflow:hidden}
+#hero .cue i::after{content:'';position:absolute;left:0;top:-50%;width:100%;height:50%;background:var(--copper-500);animation:cuedrop 1.8s ease-in-out infinite}
+@keyframes cuedrop{0%{top:-50%}70%{top:100%}100%{top:100%}}
+
+/* ——— account cards (link + sever) ——— */
+.pair{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.pairrow{display:flex;align-items:center;justify-content:space-between;width:min(1060px,88vw);position:relative;margin-bottom:clamp(60px,18vh,180px)}
+.acct{
+  position:relative;z-index:3;width:clamp(150px,22vw,260px);
+  background:var(--ink-850);border:1px solid var(--ink-700);border-radius:4px;
+  padding:clamp(12px,1.6vw,20px);
+}
+.acct .tag{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--ink-400);
+  text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.acct .tag i{width:7px;height:7px;background:var(--ink-600);display:inline-block}
+.acct.hot .tag i{background:var(--copper-500)}
+.acct .addr{font-family:var(--mono);font-size:clamp(10px,1vw,13px);color:var(--ink-100);line-height:1.7;word-break:break-all}
+.acct .meta{font-family:var(--mono);font-size:10px;color:var(--ink-400);margin-top:10px}
+.acct.ot{border-color:var(--copper-600);background:var(--ink-900)}
+.acct.ot .addr{color:var(--copper-300)}
+.wire{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;z-index:2}
+.wire line{stroke:var(--copper-500);stroke-width:2}
+.wire .glowline{stroke:var(--copper-500);stroke-width:7;opacity:.14}
+.obschip{
+  position:absolute;top:clamp(84px,14vh,140px);right:clamp(18px,6vw,84px);z-index:9;
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--ink-600);border-radius:3px;padding:9px 14px;background:rgba(11,12,14,.7);
+  display:grid;
+}
+.obschip span{grid-area:1/1;white-space:nowrap}
+.obschip .s1{color:var(--ink-300)}
+.obschip .s2{color:var(--bad)}
+.obschip .s3{color:var(--ok)}
+.frag{position:absolute;width:6px;height:6px;background:var(--copper-500);z-index:4;opacity:0;will-change:transform}
+.otlabel{
+  position:absolute;z-index:9;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--copper-400);border:1px solid var(--copper-600);
+  border-radius:3px;padding:7px 12px;background:rgba(11,12,14,.8);white-space:nowrap;
+}
+
+/* ——— corridor ——— */
+#corridor .track{position:absolute;top:0;left:0;height:100%;display:flex;align-items:center;
+  gap:clamp(60px,9vw,150px);padding:0 55vw 0 60vw;width:max-content;will-change:transform}
+.cell{display:flex;flex-direction:column;align-items:center;gap:14px;flex:none}
+.cell svg{display:block}
+.cell .caddr{font-family:var(--mono);font-size:10.5px;color:var(--ink-400);letter-spacing:.06em}
+.cell .cchip{font-family:var(--mono);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--ink-600);border:1px solid var(--ink-700);border-radius:3px;padding:5px 9px;
+  transition:color .25s,border-color .25s}
+.cell.scanned .cchip{color:var(--bad);border-color:rgba(180,85,63,.5)}
+.cell.d2{opacity:.55;transform:scale(.72)}
+.cell.d3{opacity:.3;transform:scale(.5)}
+.scanline{position:absolute;top:0;bottom:0;left:55%;width:1px;background:var(--copper-500);
+  opacity:.5;z-index:6;pointer-events:none}
+.scanline::after{content:'SCAN';position:absolute;top:84px;left:10px;font-family:var(--mono);
+  font-size:9px;letter-spacing:.3em;color:var(--copper-400)}
+#corridor .beat-start{left:clamp(20px,6vw,84px);top:50%;transform:translateY(-50%)}
+#corridor .beat-end{right:clamp(20px,6vw,84px);top:50%;transform:translateY(-50%);text-align:right}
+#corridor .beat-end p{margin-left:auto}
+
+/* ——— view key ——— */
+#viewkey .gridwrap{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+#viewkey .vgrid{display:grid;gap:clamp(18px,3vw,44px)}
+.vsq{position:relative;width:clamp(30px,4.4vw,56px);height:clamp(30px,4.4vw,56px);
+  border:1.5px solid var(--ink-600)}
+.vsq i{position:absolute;inset:4px;background:var(--copper-500);transform:scale(0);will-change:transform}
+.sweep{position:absolute;top:-10%;bottom:-10%;width:clamp(60px,9vw,150px);left:0;
+  background:linear-gradient(90deg,transparent,rgba(200,118,60,.09),transparent);
+  transform:translateX(-140%) skewX(-12deg);z-index:4;will-change:transform}
+.vkchip{position:absolute;top:clamp(84px,14vh,140px);left:50%;transform:translateX(-50%);z-index:9;
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+  border:1px solid var(--ink-600);border-radius:3px;padding:9px 14px;background:rgba(11,12,14,.7);display:grid}
+.vkchip span{grid-area:1/1;white-space:nowrap}
+.vkchip .s1{color:var(--ink-300)}
+.vkchip .s2{color:var(--ok)}
+.claimlock{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;z-index:10;pointer-events:none}
+.claimlock svg{overflow:visible}
+.claimlock .lockword{font-family:var(--display);font-stretch:125%;font-weight:800;font-size:clamp(24px,3vw,40px);
+  letter-spacing:.12em;color:var(--ink-50);text-transform:uppercase;margin-top:26px}
+#viewkey .beat-bl{z-index:11}
+
+/* ——— silence ——— */
+#silence .tick-col{position:absolute;top:-6%;width:max-content;will-change:transform}
+#silence .beat-c{padding:56px 84px;max-width:min(820px,94vw);
+  background:radial-gradient(ellipse closest-side,rgba(8,9,11,.92) 40%,rgba(8,9,11,0) 100%)}
+@media(max-width:760px){#silence .beat-c{padding:36px 20px}}
+#silence .beat-c h2{margin-bottom:6px}
+#silence .beat-c .l2{color:var(--copper-400)}
+
+/* ——— content ——— */
+.content{position:relative;z-index:5;background:var(--ink-950)}
+.sect{max-width:1120px;margin:0 auto;padding:clamp(84px,12vh,150px) clamp(20px,4vw,40px)}
+.sect .eyebrow{display:block;margin-bottom:18px}
+.sect h2.display{font-size:clamp(30px,4vw,54px);margin-bottom:16px}
+.sect .lead{color:var(--ink-300);max-width:58ch;font-size:clamp(15px,1.3vw,17px)}
+.rev{opacity:0;transform:translateY(14px)}
+.norev .rev,.reduced .rev{opacity:1;transform:none}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:22px;margin-top:52px}
+@media(max-width:860px){.steps{grid-template-columns:1fr}}
+.step{background:var(--ink-900);border:1px solid var(--ink-700);border-radius:4px;
+  padding:26px 24px 28px;display:flex;flex-direction:column;gap:14px}
+.step .n{font-family:var(--mono);font-size:11px;letter-spacing:.24em;color:var(--copper-400)}
+.step h3{font-family:var(--display);font-stretch:125%;font-weight:700;font-size:19px;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-50)}
+.step p{color:var(--ink-300);font-size:14.5px}
+.step .diag{height:88px;display:flex;align-items:center;justify-content:center;
+  background:var(--ink-850);border:1px solid var(--ink-700);border-radius:3px;margin-top:4px}
+
+.wtable{margin-top:48px;border:1px solid var(--ink-700);border-radius:4px;overflow:hidden}
+.wrow{display:grid;grid-template-columns:1.4fr .7fr .9fr 2fr;align-items:center;
+  padding:18px 22px;background:var(--ink-900);border-top:1px solid var(--ink-700);gap:10px}
+.wrow:first-child{border-top:0;background:var(--ink-850)}
+.wrow .h{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--ink-400);text-transform:uppercase}
+.wname{display:flex;align-items:center;gap:12px;font-weight:600;color:var(--ink-50);font-size:15px}
+.wname i{width:8px;height:8px;background:var(--copper-500);display:inline-block}
+.wmark{font-family:var(--mono);font-size:13px}
+.wmark.y{color:var(--ok)}
+.wmark.n{color:var(--ink-400)}
+.wnote{color:var(--ink-300);font-size:13.5px}
+@media(max-width:760px){
+  .wrow{grid-template-columns:1.2fr .6fr .8fr;padding:14px 16px}
+  .wrow .wnote,.wrow .h4{display:none}
+}
+.wfoot{font-family:var(--mono);font-size:12px;color:var(--ink-400);margin-top:16px;line-height:1.8}
+
+.devwell{margin-top:48px;background:var(--ink-900);border:1px solid var(--ink-700);border-radius:4px;
+  padding:clamp(22px,3vw,36px);display:flex;flex-wrap:wrap;gap:28px;align-items:center;justify-content:space-between}
+.cmd{display:flex;align-items:center;gap:16px;background:var(--void);border:1px solid var(--ink-700);
+  border-radius:4px;padding:16px 20px;font-family:var(--mono);font-size:clamp(13px,1.4vw,16px)}
+.cmd .p{color:var(--ink-400)}
+.cmd .c{color:var(--copper-300)}
+.cmd button{color:var(--ink-400);display:flex;transition:color .2s}
+.cmd button:hover{color:var(--copper-300)}
+.devlinks{display:flex;gap:22px;flex-wrap:wrap}
+.devlinks a{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;
+  letter-spacing:.06em;color:var(--ink-300);transition:color .2s}
+.devlinks a:hover{color:var(--ink-50)}
+.warn{margin-top:26px;border:1px solid var(--copper-600);border-radius:4px;padding:18px 22px;
+  display:flex;gap:14px;align-items:flex-start}
+.warn svg{flex:none;margin-top:2px}
+.warn p{font-size:14px;color:var(--ink-300)}
+.warn b{color:var(--copper-300);font-weight:600}
+
+.finale{text-align:center;position:relative;overflow:hidden}
+.finale .bigsq{position:absolute;right:-140px;top:50%;transform:translateY(-50%);
+  width:420px;height:420px;border:1.5px solid var(--ink-800);pointer-events:none}
+.finale .bigsq::after{content:'';position:absolute;inset:60px;border:1.5px solid var(--ink-800)}
+.finale h2{font-size:clamp(38px,5.6vw,76px)}
+.finale .lead{margin:0 auto}
+.finale .ctas{display:flex;gap:14px;justify-content:center;margin-top:40px;flex-wrap:wrap}
+
+.foot{border-top:1px solid var(--ink-700);background:var(--ink-950)}
+.foot .in{max-width:1120px;margin:0 auto;padding:34px clamp(20px,4vw,40px);
+  display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.foot .l{display:flex;align-items:center;gap:12px}
+.foot .word{font-family:var(--display);font-stretch:125%;font-weight:700;font-size:13px;
+  letter-spacing:.14em;color:var(--ink-100);text-transform:uppercase}
+.foot .tag{font-family:var(--mono);font-size:11px;color:var(--ink-400)}
+.foot .r{display:flex;gap:20px;align-items:center}
+.foot .r a{color:var(--ink-400);transition:color .2s;display:flex;align-items:center;gap:7px;
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.08em}
+.foot .r a:hover{color:var(--ink-100)}
+
+/* ——— reduced motion / static fallback ——— */
+.reduced .scene{height:auto;min-height:0;padding:110px 0}
+.reduced .stage{position:relative;inset:auto;height:auto}
+.reduced .beat{position:relative;left:auto;right:auto;top:auto;bottom:auto;transform:none;
+  margin:0 auto 40px;text-align:center;max-width:640px;padding:0 20px}
+.reduced #hero{height:100svh;padding:0}
+.reduced .cue,.reduced .scanline,.reduced .sweep,.reduced .lens{display:none}
+.reduced #corridor .track{position:relative;width:auto;flex-wrap:wrap;justify-content:center;
+  padding:0 20px;gap:40px}
+.reduced .pair{position:relative;padding:20px}
+.reduced .frag{display:none}
+.reduced .claimlock{position:relative;margin-top:40px}
+.reduced .obschip,.reduced .vkchip,.reduced .otlabel{position:relative;top:auto;right:auto;left:auto;
+  transform:none;margin:0 auto 30px;width:max-content}
+@media(prefers-reduced-motion:reduce){
+  #hero .cue i::after{animation:none}
+}
+</style>
+</head>
+<body class="norev">
+
+<header class="hdr" id="hdr">
+  <a class="lockup" href="#" aria-label="Shade — home">
+    <svg width="22" height="22" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/>
+      <rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/>
+    </svg>
+    <span class="word">Shade</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk" href="#how">Protocol</a>
+    <a class="lnk" href="#wallets">Wallets</a>
+    <a class="lnk" href="#dev">Developers</a>
+    <a class="gh" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener" aria-label="GitHub repository">
+      <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+    </a>
+    <a class="btn btn-copper" href="https://stellarshade.vercel.app" target="_blank" rel="noopener">Launch demo</a>
+  </nav>
+</header>
+
+<!-- film lens (vignette + grain), fades out at the seam -->
+<div class="lens" id="lens" aria-hidden="true"><div class="vig"></div><div class="grain"></div></div>
+
+<!-- ————— CHAPTER 0 · LEDGER ————— -->
+<section class="scene" id="hero">
+  <div class="stage" aria-hidden="true">
+    <div class="tick-col c1"></div>
+    <div class="tick-col c2"></div>
+    <div class="tick-col c3"></div>
+    <div class="tickmask"></div>
+  </div>
+  <div class="core">
+    <svg class="mark-pulse" id="heromark" width="44" height="44" viewBox="0 0 20 20" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/>
+      <rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/>
+    </svg>
+    <h1 class="wordmark" id="wordmark" aria-label="Shade">
+      <span class="ch">S</span><span class="ch">H</span><span class="ch">A</span><span class="ch">D</span><span class="ch">E</span>
+    </h1>
+    <p class="sub" id="herosub">Private payments on a public ledger. Every transfer lands at a fresh
+      one-time address — <b>nothing on-chain links it to you.</b></p>
+    <div class="ctas" id="heroctas">
+      <a class="btn btn-copper btn-lg" href="https://stellarshade.vercel.app" target="_blank" rel="noopener">Launch demo</a>
+      <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
+    </div>
+  </div>
+  <div class="cue" aria-hidden="true"><span>SCROLL</span><i></i></div>
+</section>
+
+<!-- ————— CHAPTER 1 · THE LINK ————— -->
+<section class="scene" id="link">
+  <div class="stage">
+    <div class="pair">
+      <div class="pairrow">
+        <svg class="wire" id="wire1" aria-hidden="true" preserveAspectRatio="none">
+          <line class="glowline" id="glow1" x1="0" y1="0" x2="0" y2="0"/>
+          <line id="line1" x1="0" y1="0" x2="0" y2="0"/>
+        </svg>
+        <div class="acct hot" id="senderA">
+          <div class="tag"><i></i>Sender</div>
+          <div class="addr">GDKX 7Q3M VN2P WA6C<br>J9RT HL5B …NV4A LR2T</div>
+          <div class="meta">balance 2 450.0 XLM</div>
+        </div>
+        <div class="acct hot" id="recipA">
+          <div class="tag"><i></i>Recipient</div>
+          <div class="addr">GB7A XQF2 M8LD KP3W<br>ZC4N TY6V …QF2N MH8S</div>
+          <div class="meta">balance 310.5 XLM</div>
+        </div>
+      </div>
+    </div>
+    <div class="obschip" id="obschip1" role="status">
+      <span class="s1" id="obs1a">Observer — watching</span>
+      <span class="s2" id="obs1b" style="opacity:0">Link confirmed · trail recorded</span>
+    </div>
+    <div class="beat beat-bl" id="beatLink">
+      <span class="eyebrow">01 · The link</span>
+      <h2>Every payment draws a line.</h2>
+      <p>Sender to recipient, in public, forever. Anyone can follow it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ————— CHAPTER 2 · SEVERANCE ————— -->
+<section class="scene" id="sever">
+  <div class="stage">
+    <div class="pair">
+      <div class="pairrow">
+        <svg class="wire" id="wire2" aria-hidden="true" preserveAspectRatio="none">
+          <line class="glowline" id="glow2L" x1="0" y1="0" x2="0" y2="0"/>
+          <line class="glowline" id="glow2R" x1="0" y1="0" x2="0" y2="0"/>
+          <line id="line2L" x1="0" y1="0" x2="0" y2="0"/>
+          <line id="line2R" x1="0" y1="0" x2="0" y2="0"/>
+        </svg>
+        <div class="acct hot">
+          <div class="tag"><i></i>Sender</div>
+          <div class="addr">GDKX 7Q3M VN2P WA6C<br>J9RT HL5B …NV4A LR2T</div>
+          <div class="meta">balance 2 450.0 XLM</div>
+        </div>
+        <div style="position:relative">
+          <div class="acct" id="recipB">
+            <div class="tag"><i></i><span id="recipTag">Recipient</span></div>
+            <div class="addr" id="recipAddr">GB7A XQF2 M8LD KP3W<br>ZC4N TY6V …QF2N MH8S</div>
+            <div class="meta" id="recipMeta">balance 310.5 XLM</div>
+          </div>
+          <div class="otlabel" id="otlabel" style="left:50%;transform:translateX(-50%);bottom:calc(100% + 14px);opacity:0">
+            One-time address · no owner on record
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="fragbox" aria-hidden="true"></div>
+    <div class="beat beat-bl" id="beatSever">
+      <span class="eyebrow">02 · Severance</span>
+      <h2>Shade severs it.</h2>
+      <p>Each transfer derives a fresh stealth address. The sender pays in — on-chain, a stranger receives.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ————— CHAPTER 3 · THE CORRIDOR ————— -->
+<section class="scene" id="corridor">
+  <div class="stage">
+    <div class="track" id="track"></div>
+    <div class="scanline" aria-hidden="true"></div>
+    <div class="beat beat-start" id="beatCorrA">
+      <span class="eyebrow">03 · The corridor</span>
+      <h2>To an observer, every transfer looks the same.</h2>
+    </div>
+    <div class="beat beat-end" id="beatCorrB">
+      <h2>Nothing on-chain links them.</h2>
+      <p>One-time addresses, no registry, no pattern to match.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ————— CHAPTER 4 · THE VIEW KEY ————— -->
+<section class="scene" id="viewkey">
+  <div class="stage">
+    <div class="gridwrap"><div class="vgrid" id="vgrid"></div></div>
+    <div class="sweep" id="sweep" aria-hidden="true"></div>
+    <div class="vkchip" id="vkchip" role="status">
+      <span class="s1" id="vk1">View key — scanning</span>
+      <span class="s2" id="vk2" style="opacity:0">1 payment detected</span>
+    </div>
+    <div class="claimlock" id="claimlock" aria-hidden="true">
+      <svg width="120" height="120" viewBox="0 0 20 20">
+        <rect id="lockGhost" x="2.5" y="2.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.2" opacity="0.55"/>
+        <rect id="lockSolid" x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/>
+      </svg>
+      <div class="lockword">Claimed</div>
+    </div>
+    <div class="beat beat-bl" id="beatView">
+      <span class="eyebrow">04 · The view key</span>
+      <h2>Only your key sees it.</h2>
+      <p>One signature scans the chain; claiming sweeps the funds to your account. Quietly.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ————— CHAPTER 5 · SILENCE ————— -->
+<section class="scene" id="silence">
+  <div class="stage" aria-hidden="true">
+    <div class="tick-col s1"></div>
+    <div class="tick-col s2"></div>
+    <div class="tick-col s3"></div>
+    <div class="tick-col s4"></div>
+    <div class="tickmask"></div>
+  </div>
+  <div class="beat beat-c" id="beatSilence">
+    <span class="eyebrow">05 · Silence</span>
+    <h2>The ledger streams on.</h2>
+    <h2 class="l2">The trail is gone.</h2>
+  </div>
+</section>
+
+<!-- ————— CONTENT ————— -->
+<main class="content">
+
+  <section class="sect" id="how">
+    <span class="eyebrow rev">Protocol</span>
+    <h2 class="display rev">Three moves. No trail.</h2>
+    <p class="lead rev">Shade runs on stealth addresses: a Soroban pool contract, a meta-address published
+      once by the recipient, and per-transfer keys nobody can connect.</p>
+    <div class="steps">
+      <div class="step rev">
+        <span class="n">01 / PUBLISH</span>
+        <div class="diag">
+          <svg width="120" height="56" viewBox="0 0 120 56" aria-hidden="true">
+            <rect x="8" y="12" width="46" height="32" rx="2" fill="none" stroke="var(--ink-600)" stroke-width="1.5"/>
+            <text x="31" y="31" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="var(--ink-300)">G…</text>
+            <line x1="54" y1="28" x2="76" y2="28" stroke="var(--copper-500)" stroke-width="1.5"/>
+            <rect x="76" y="18" width="34" height="20" rx="2" fill="none" stroke="var(--copper-500)" stroke-width="1.5"/>
+            <text x="93" y="31" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="var(--copper-300)">64 B</text>
+          </svg>
+        </div>
+        <h3>Publish once</h3>
+        <p>The recipient signs once and publishes a 64-byte meta-address as a data entry on their own
+          account. It reveals nothing about future payments.</p>
+      </div>
+      <div class="step rev">
+        <span class="n">02 / SEND</span>
+        <div class="diag">
+          <svg width="120" height="56" viewBox="0 0 120 56" aria-hidden="true">
+            <circle cx="18" cy="28" r="10" fill="none" stroke="var(--ink-600)" stroke-width="1.5"/>
+            <line x1="28" y1="28" x2="70" y2="28" stroke="var(--copper-500)" stroke-width="1.5"/>
+            <path d="M64 22l8 6-8 6" fill="none" stroke="var(--copper-500)" stroke-width="1.5"/>
+            <rect x="80" y="16" width="24" height="24" fill="none" stroke="var(--copper-500)" stroke-width="1.8"/>
+          </svg>
+        </div>
+        <h3>Send anywhere</h3>
+        <p>Enter an ordinary G address or a meta-address — either way a fresh one-time stealth address
+          is derived and paid. No two transfers share one.</p>
+      </div>
+      <div class="step rev">
+        <span class="n">03 / CLAIM</span>
+        <div class="diag">
+          <svg width="120" height="56" viewBox="0 0 120 56" aria-hidden="true">
+            <rect x="24" y="16" width="24" height="24" fill="none" stroke="var(--ink-600)" stroke-width="1.8"/>
+            <rect x="72" y="16" width="24" height="24" fill="var(--copper-500)"/>
+            <line x1="48" y1="28" x2="66" y2="28" stroke="var(--copper-500)" stroke-width="1.5"/>
+          </svg>
+        </div>
+        <h3>Claim quietly</h3>
+        <p>Your view key detects incoming payments; claiming moves the funds to your account. Keys live
+          in memory only — never written to storage.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sect" id="wallets">
+    <span class="eyebrow rev">Wallets</span>
+    <h2 class="display rev">Bring your own signer.</h2>
+    <p class="lead rev">Wallets plug in through one connector interface. Receiving needs raw message
+      signing to derive stealth keys — wallets without it are labelled up front, not failed later.</p>
+    <div class="wtable rev" role="table" aria-label="Wallet support">
+      <div class="wrow" role="row">
+        <span class="h" role="columnheader">Wallet</span>
+        <span class="h" role="columnheader">Send</span>
+        <span class="h" role="columnheader">Receive</span>
+        <span class="h h4" role="columnheader">Notes</span>
+      </div>
+      <div class="wrow" role="row">
+        <span class="wname" role="cell"><i></i>Freighter</span>
+        <span class="wmark y" role="cell">YES</span>
+        <span class="wmark y" role="cell">YES</span>
+        <span class="wnote" role="cell">Full support — recommended</span>
+      </div>
+      <div class="wrow" role="row">
+        <span class="wname" role="cell"><i></i>xBull</span>
+        <span class="wmark y" role="cell">YES</span>
+        <span class="wmark n" role="cell">—</span>
+        <span class="wnote" role="cell">No raw message signing for key derivation</span>
+      </div>
+      <div class="wrow" role="row">
+        <span class="wname" role="cell"><i></i>Albedo</span>
+        <span class="wmark y" role="cell">YES</span>
+        <span class="wmark n" role="cell">—</span>
+        <span class="wnote" role="cell">No raw message signing for key derivation</span>
+      </div>
+    </div>
+    <p class="wfoot rev">Stealth private keys are re-derived from a wallet signature each session and
+      held in memory only. The encrypted scan cache unlocks with one signature.</p>
+  </section>
+
+  <section class="sect" id="dev">
+    <span class="eyebrow rev">Developers</span>
+    <h2 class="display rev">One package.</h2>
+    <p class="lead rev">The demo is a reference client for the <span class="mono">stellar-shade</span> SDK —
+      stealth key derivation, the Soroban pool contract, relayer and indexer clients.</p>
+    <div class="devwell rev">
+      <div class="cmd">
+        <span class="p">$</span>
+        <span class="c" id="cmdtext">npm install stellar-shade</span>
+        <button id="copybtn" aria-label="Copy install command">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <div class="devlinks">
+        <a href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          demo source
+        </a>
+        <a href="https://www.npmjs.com/package/stellar-shade" target="_blank" rel="noopener">
+          <svg width="16" height="16" viewBox="0 0 27.23 27.23" fill="currentColor" aria-hidden="true"><path d="M0 0h27.23v27.23H0V0zm5.13 5.13v17h8.5v-13.6h5.1v13.6h3.4v-17H5.13z"/></svg>
+          stellar-shade
+        </a>
+      </div>
+    </div>
+    <div class="warn rev">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--copper-400)" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <p><b>Testnet only.</b> The Shade protocol's cryptography is pending external audit — don't use
+        it with real value.</p>
+    </div>
+  </section>
+
+  <section class="sect finale" id="try">
+    <div class="bigsq" aria-hidden="true"></div>
+    <span class="eyebrow rev">Testnet demo</span>
+    <h2 class="display rev">See a payment disappear.</h2>
+    <p class="lead rev">Two testnet accounts. Five minutes. One vanished trail.</p>
+    <div class="ctas rev">
+      <a class="btn btn-copper btn-lg" href="https://stellarshade.vercel.app" target="_blank" rel="noopener">Launch demo</a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">View source</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="foot">
+  <div class="in">
+    <div class="l">
+      <svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/>
+        <rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/>
+      </svg>
+      <span class="word">Shade</span>
+      <span class="tag">— stealth addresses on Stellar · testnet</span>
+    </div>
+    <div class="r">
+      <a href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <a href="https://www.npmjs.com/package/stellar-shade" target="_blank" rel="noopener">npm</a>
+      <a href="https://stellar.expert/explorer/testnet" target="_blank" rel="noopener">stellar.expert</a>
+    </div>
+  </div>
+</footer>
+
+<script src="vendor/gsap.min.js"></script>
+<script src="vendor/ScrollTrigger.min.js"></script>
+<script src="vendor/lenis.min.js"></script>
+<script>
+/* ————— THE UNLINKING — film engine ————— */
+(() => {
+'use strict';
+gsap.registerPlugin(ScrollTrigger);
+
+const JUMP = new URLSearchParams(location.search).get('jump');
+if (JUMP !== null) history.scrollRestoration = 'manual';
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MOBILE = matchMedia('(max-width: 760px)').matches;
+
+/* seeded PRNG — deterministic page, stable screenshots */
+let seed = 0x5eed;
+const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+const pick = a => a[Math.floor(rnd() * a.length)];
+const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+const gaddr = () => 'G' + Array.from({length: 4}, () => pick(B32)).join('');
+const seg = n => Array.from({length: n}, () => pick(B32)).join('');
+
+/* ——— DOM generation (before any ScrollTrigger) ——— */
+const OPS = ['payment', 'payment', 'payment', 'create_account', 'path_payment', 'manage_data'];
+function tickRow() {
+  const amt = (rnd() * 480 + 0.5).toFixed(1);
+  return `<div class="tickrow">${(4821000 + Math.floor(rnd() * 900)).toString()} · ${pick(OPS)} · ` +
+    `<b>${gaddr()}…${seg(4)}</b> → <b>${gaddr()}…${seg(4)}</b> · ${amt} XLM</div>`;
+}
+function fillTicker(sel, n) {
+  document.querySelectorAll(sel).forEach(col => {
+    let h = '';
+    for (let i = 0; i < n; i++) h += tickRow();
+    col.innerHTML = h + h; /* doubled for seamless loop */
+  });
+}
+fillTicker('#hero .tick-col', 26);
+fillTicker('#silence .tick-col', 26);
+document.querySelectorAll('#silence .tick-col').forEach((c, i) => {
+  c.style.left = (8 + i * 26) + '%';
+  c.style.opacity = [.26, .13, .2, .1][i];
+});
+
+/* corridor cells */
+const track = document.getElementById('track');
+const CELLS = MOBILE ? 9 : 13;
+const depths = ['', '', 'd2', '', 'd3', '', '', 'd2', '', '', 'd3', 'd2', '', '', 'd2'];
+for (let i = 0; i < CELLS; i++) {
+  const d = depths[i] || '';
+  const s = d === 'd3' ? 44 : d === 'd2' ? 58 : 76;
+  track.insertAdjacentHTML('beforeend',
+    `<div class="cell ${d}">
+       <svg width="${s}" height="${s}" viewBox="0 0 20 20">
+         <rect x="2" y="2" width="16" height="16" fill="none" stroke="var(--ink-600)" stroke-width="1.6"/>
+       </svg>
+       <span class="caddr">${gaddr()}…${seg(4)}</span>
+       <span class="cchip">unspent output</span>
+     </div>`);
+}
+
+/* view-key grid */
+const vgrid = document.getElementById('vgrid');
+const COLS = MOBILE ? 4 : 8, ROWS = MOBILE ? 6 : 4;
+vgrid.style.gridTemplateColumns = `repeat(${COLS},1fr)`;
+const TARGET = MOBILE ? { c: 2, r: 2 } : { c: 5, r: 1 };
+for (let r = 0; r < ROWS; r++)
+  for (let c = 0; c < COLS; c++)
+    vgrid.insertAdjacentHTML('beforeend',
+      `<div class="vsq" data-c="${c}" ${c === TARGET.c && r === TARGET.r ? 'id="vtarget"' : ''}><i></i></div>`);
+
+/* severance fragments */
+const fragbox = document.getElementById('fragbox');
+const FRAGS = 42, fragData = [];
+for (let i = 0; i < FRAGS; i++) {
+  fragbox.insertAdjacentHTML('beforeend', `<div class="frag"></div>`);
+  fragData.push({
+    x: (rnd() - 0.5) * (MOBILE ? 300 : 640),
+    y: (rnd() - 0.5) * 420 - 40,
+    r: (rnd() - 0.5) * 540,
+    s: 0.4 + rnd() * 1.1,
+  });
+}
+
+/* recipient address scramble frames */
+const finalOT = 'GAZT 9WQF K2XB DM7H<br>PL3R VC8N …K2XB TQ5W';
+const startAddr = 'GB7A XQF2 M8LD KP3W<br>ZC4N TY6V …QF2N MH8S';
+const scrambleFrames = [startAddr];
+{
+  const a = startAddr.replace('<br>', '\n').split('');
+  const b = finalOT.replace('<br>', '\n').split('');
+  for (let f = 1; f <= 8; f++) {
+    const out = a.map((ch, i) => {
+      if (ch === ' ' || ch === '\n' || ch === '…') return b[i] || ch;
+      const t = f / 8;
+      if (rnd() < t * t) return b[i] || ch;
+      return rnd() < 0.55 ? pick(B32) : ch;
+    });
+    scrambleFrames.push(out.join('').replace('\n', '<br>'));
+  }
+  scrambleFrames.push(finalOT);
+}
+
+/* ——— wire endpoints (link + sever scenes) ——— */
+function wireUp(svgId, fromEl, toEl, ids) {
+  const svg = document.getElementById(svgId);
+  const row = svg.parentElement;
+  const rb = row.getBoundingClientRect();
+  const fb = fromEl.getBoundingClientRect(), tb = toEl.getBoundingClientRect();
+  const y = fb.top + fb.height / 2 - rb.top;
+  const x1 = fb.right - rb.left, x2 = tb.left - rb.left;
+  svg.setAttribute('viewBox', `0 0 ${rb.width} ${rb.height}`);
+  svg.setAttribute('width', rb.width); svg.setAttribute('height', rb.height);
+  ids.forEach(([id, a, b]) => {
+    const el = document.getElementById(id);
+    el.setAttribute('x1', a === 'L' ? x1 : (x1 + x2) / 2);
+    el.setAttribute('x2', b === 'R' ? x2 : (x1 + x2) / 2);
+    el.setAttribute('y1', y); el.setAttribute('y2', y);
+  });
+  return { x1, x2, y };
+}
+let wire1len = 0;
+function layoutWires() {
+  const w1 = wireUp('wire1', document.getElementById('senderA'), document.getElementById('recipA'),
+    [['line1', 'L', 'R'], ['glow1', 'L', 'R']]);
+  wire1len = w1.x2 - w1.x1;
+  const l1 = document.getElementById('line1'), g1 = document.getElementById('glow1');
+  [l1, g1].forEach(l => { l.style.strokeDasharray = wire1len; });
+  wireUp('wire2', document.querySelector('#sever .acct'), document.getElementById('recipB'),
+    [['line2L', 'L', 'M'], ['glow2L', 'L', 'M'], ['line2R', 'M', 'R'], ['glow2R', 'M', 'R']]);
+}
+layoutWires();
+
+/* ————— static path for reduced motion ————— */
+if (REDUCED) {
+  document.body.classList.add('reduced');
+  document.body.classList.remove('norev');
+  gsap.set('#line1,#glow1', { strokeDashoffset: 0 });
+  gsap.set('#obs1b', { opacity: 1 }); gsap.set('#obs1a', { opacity: 0 });
+  document.getElementById('recipAddr').innerHTML = finalOT;
+  document.getElementById('recipTag').textContent = 'One-time';
+  document.getElementById('recipB').classList.add('ot');
+  gsap.set('#otlabel', { opacity: 1 });
+  gsap.set('#line2L,#line2R,#glow2L,#glow2R', { scaleX: 0 });
+  document.querySelectorAll('.cell').forEach(c => c.classList.add('scanned'));
+  document.querySelectorAll('.cell .cchip').forEach(c => c.textContent = 'no match');
+  gsap.set('#vtarget i', { scale: 1 });
+  gsap.set('#vk2', { opacity: 1 }); gsap.set('#vk1', { opacity: 0 });
+  gsap.set('#claimlock', { opacity: 1 });
+  window.__ready = true;
+  return;
+}
+
+/* ————— smooth scroll ————— */
+let lenis = null;
+if (JUMP === null) {
+  lenis = new Lenis({ lerp: 0.09, smoothWheel: true });
+  lenis.on('scroll', ScrollTrigger.update);
+  gsap.ticker.add(t => lenis.raf(t * 1000));
+  gsap.ticker.lagSmoothing(0);
+  document.querySelectorAll('a[href^="#"]').forEach(a => {
+    a.addEventListener('click', e => {
+      const t = document.querySelector(a.getAttribute('href'));
+      if (t) { e.preventDefault(); lenis.scrollTo(t, { offset: -64 }); }
+    });
+  });
+}
+
+/* ————— PINNED SCENES — created first, in order (refresh order law) ————— */
+
+/* CH1 · THE LINK */
+gsap.set('#line1,#glow1', { strokeDashoffset: () => wire1len });
+const tlLink = gsap.timeline({
+  scrollTrigger: { trigger: '#link', start: 'top top', end: '+=170%', scrub: 0.6, pin: true },
+  defaults: { ease: 'none' },
+});
+tlLink
+  .from('#beatLink', { autoAlpha: 0, y: 44, duration: 0.12, ease: 'power2.out' }, 0.02)
+  .from('#senderA', { autoAlpha: 0, x: -40, duration: 0.1, ease: 'power2.out' }, 0.06)
+  .from('#recipA', { autoAlpha: 0, x: 40, duration: 0.1, ease: 'power2.out' }, 0.08)
+  .from('#obschip1', { autoAlpha: 0, y: -16, duration: 0.08, ease: 'power2.out' }, 0.14)
+  .to('#line1,#glow1', { strokeDashoffset: 0, duration: 0.34, ease: 'power1.inOut' }, 0.2)
+  .to('#obs1a', { opacity: 0, duration: 0.04 }, 0.56)
+  .to('#obs1b', { opacity: 1, duration: 0.04 }, 0.58)
+  .fromTo('#glow1', { opacity: 0.14 }, { opacity: 0.42, duration: 0.1, yoyo: true, repeat: 1 }, 0.58)
+  .to('#beatLink', { autoAlpha: 0, y: -30, duration: 0.1, ease: 'power2.in' }, 0.86)
+  .to('#link .pair, #obschip1', { autoAlpha: 0, duration: 0.1 }, 0.9);
+
+/* CH2 · SEVERANCE */
+const tlSever = gsap.timeline({
+  scrollTrigger: { trigger: '#sever', start: 'top top', end: '+=190%', scrub: 0.6, pin: true },
+  defaults: { ease: 'none' },
+});
+const scrambleState = { f: 0 };
+tlSever
+  .from('#sever .pair', { autoAlpha: 0, duration: 0.08 }, 0)
+  .from('#beatSever', { autoAlpha: 0, y: 44, duration: 0.12, ease: 'power2.out' }, 0.05)
+  /* the snap */
+  .to('#line2L,#glow2L', { scaleX: 0, transformOrigin: 'left center', duration: 0.14, ease: 'power3.in' }, 0.24)
+  .to('#line2R,#glow2R', { scaleX: 0, transformOrigin: 'right center', duration: 0.14, ease: 'power3.in' }, 0.24)
+  .fromTo('.frag', { opacity: 1, x: 0, y: 0, rotation: 0, scale: 1 }, {
+    immediateRender: false,
+    opacity: 0,
+    x: i => fragData[i].x, y: i => fragData[i].y,
+    rotation: i => fragData[i].r, scale: i => fragData[i].s,
+    duration: 0.3, ease: 'power2.out',
+  }, 0.35)
+  /* recipient card scrambles into a one-time address */
+  .to(scrambleState, {
+    f: scrambleFrames.length - 1, duration: 0.28, ease: 'none',
+    snap: { f: 1 },
+    onUpdate: () => {
+      document.getElementById('recipAddr').innerHTML = scrambleFrames[Math.round(scrambleState.f)];
+      const done = scrambleState.f > scrambleFrames.length - 2;
+      document.getElementById('recipTag').textContent = done ? 'One-time' : 'Recipient';
+      document.getElementById('recipB').classList.toggle('ot', done);
+      document.getElementById('recipMeta').textContent = done ? 'derived per transfer' : 'balance 310.5 XLM';
+    },
+  }, 0.4)
+  .to('#otlabel', { opacity: 1, duration: 0.08 }, 0.72)
+  .to('#beatSever', { autoAlpha: 0, y: -30, duration: 0.1, ease: 'power2.in' }, 0.88)
+  .to('#sever .pair, #otlabel', { autoAlpha: 0, duration: 0.1 }, 0.92);
+/* fragbox positioning: center burst at the wire midpoint */
+(function placeFrags() {
+  const row = document.querySelector('#sever .pairrow');
+  const rb = row.getBoundingClientRect();
+  fragbox.style.cssText =
+    `position:absolute;left:50%;top:50%;width:0;height:0;z-index:4`;
+})();
+
+/* CH3 · THE CORRIDOR (horizontal) */
+const corridorTween = gsap.to('#track', {
+  x: () => -(track.scrollWidth - innerWidth),
+  ease: 'none',
+  scrollTrigger: {
+    trigger: '#corridor', start: 'top top', end: '+=260%',
+    scrub: 0.6, pin: true, invalidateOnRefresh: true,
+  },
+});
+/* per-cell scan flip — containerAnimation triggers (created right after their container tween) */
+document.querySelectorAll('.cell').forEach(cell => {
+  ScrollTrigger.create({
+    trigger: cell, containerAnimation: corridorTween,
+    start: 'center 55%',
+    onEnter: () => { cell.classList.add('scanned'); cell.querySelector('.cchip').textContent = 'no match'; },
+    onLeaveBack: () => { cell.classList.remove('scanned'); cell.querySelector('.cchip').textContent = 'unspent output'; },
+  });
+});
+/* corridor copy envelopes ride the same scroll span */
+gsap.timeline({
+  scrollTrigger: { trigger: '#corridor', start: 'top top', end: '+=260%', scrub: 0.6 },
+  defaults: { ease: 'none' },
+})
+  .fromTo('#beatCorrA', { autoAlpha: 1 }, { autoAlpha: 0, x: -60, duration: 0.18, ease: 'power1.in' }, 0.16)
+  .fromTo('#beatCorrB', { autoAlpha: 0, x: 60 }, { autoAlpha: 1, x: 0, duration: 0.18, ease: 'power1.out' }, 0.74);
+
+/* CH4 · THE VIEW KEY */
+const tlView = gsap.timeline({
+  scrollTrigger: { trigger: '#viewkey', start: 'top top', end: '+=210%', scrub: 0.6, pin: true },
+  defaults: { ease: 'none' },
+});
+tlView
+  .from('#viewkey .vgrid', { autoAlpha: 0, duration: 0.08 }, 0)
+  .from('#vkchip', { autoAlpha: 0, y: -16, duration: 0.08, ease: 'power2.out' }, 0.04)
+  .fromTo('#sweep', { xPercent: 0, x: '-30vw' }, { x: '110vw', duration: 0.5 }, 0.1);
+/* per-column flicker as the sweep passes */
+{
+  const D = 0.5, t0 = 0.1;
+  for (let c = 0; c < COLS; c++) {
+    const at = t0 + (c / COLS) * D + 0.04;
+    tlView.fromTo(`.vsq[data-c="${c}"]`,
+      { borderColor: 'var(--ink-600)' },
+      { borderColor: 'var(--copper-500)', duration: 0.02, yoyo: true, repeat: 1 }, at);
+  }
+  const tAt = t0 + (TARGET.c / COLS) * D + 0.05;
+  tlView
+    .to('#vtarget i', { scale: 1, duration: 0.06, ease: 'back.out(1.6)' }, tAt)
+    .to('#vtarget', { borderColor: 'var(--copper-500)', duration: 0.03 }, tAt)
+    .to('#vk1', { opacity: 0, duration: 0.015 }, tAt + 0.04)
+    .to('#vk2', { opacity: 1, duration: 0.015 }, tAt + 0.056);
+}
+tlView
+  .from('#beatView', { autoAlpha: 0, y: 44, duration: 0.1, ease: 'power2.out' }, 0.64)
+  /* the claim — the grid dims, the mechanism becomes the logo */
+  .to('#viewkey .vgrid', { autoAlpha: 0.05, duration: 0.1 }, 0.78)
+  .to('#vkchip', { autoAlpha: 0, duration: 0.06 }, 0.78)
+  .fromTo('#claimlock', { autoAlpha: 0, scale: 0.7 }, { autoAlpha: 1, scale: 1, duration: 0.12, ease: 'power2.out' }, 0.8)
+  .fromTo('#lockGhost', { attr: { x: 2.5, y: 2.5 } }, { attr: { x: 7.5, y: 7.5 }, duration: 0.1, ease: 'power2.inOut' }, 0.86);
+
+/* CH5 · SILENCE */
+const tlSilence = gsap.timeline({
+  scrollTrigger: { trigger: '#silence', start: 'top top', end: '+=150%', scrub: 0.6, pin: true },
+  defaults: { ease: 'none' },
+});
+tlSilence
+  .from('#beatSilence .eyebrow', { autoAlpha: 0, duration: 0.06 }, 0.06)
+  .from('#beatSilence h2:not(.l2)', { autoAlpha: 0, y: 30, duration: 0.12, ease: 'power2.out' }, 0.1)
+  .from('#beatSilence .l2', { autoAlpha: 0, y: 30, duration: 0.12, ease: 'power2.out' }, 0.3)
+  .to('#lens', { autoAlpha: 0, duration: 0.2 }, 0.72)
+  .to('#silence .stage', { autoAlpha: 0.4, duration: 0.2 }, 0.72)
+  .to('#silence', { backgroundColor: '#0b0c0e', duration: 0.2 }, 0.78);
+
+/* ————— AMBIENT (after all pins — ordering law) ————— */
+
+/* hero ticker drift — time-driven, seamless loop over the doubled content */
+document.querySelectorAll('.tick-col').forEach((col, i) => {
+  gsap.to(col, { yPercent: -50, duration: 46 + (i % 4) * 9, ease: 'none', repeat: -1 });
+});
+/* hero exit scrub */
+gsap.timeline({
+  scrollTrigger: { trigger: '#hero', start: 'top top', end: 'bottom top', scrub: 0.5 },
+  defaults: { ease: 'none' },
+})
+  .to('#hero .core', { yPercent: -24, autoAlpha: 0 }, 0)
+  .to('#hero .cue', { autoAlpha: 0 }, 0)
+  .to('#hero .tick-col', { yPercent: '-=6' }, 0);
+/* hero mark pulse */
+gsap.to('#heromark', { opacity: 0.55, duration: 1.6, ease: 'sine.inOut', yoyo: true, repeat: -1 });
+
+/* header state */
+ScrollTrigger.create({
+  start: 80, onToggle: self => document.getElementById('hdr').classList.toggle('solid', self.isActive),
+  onUpdate: () => {}, end: 'max',
+});
+
+/* content reveals */
+document.body.classList.remove('norev');
+document.querySelectorAll('.rev').forEach(el => {
+  gsap.to(el, {
+    opacity: 1, y: 0, duration: 0.45, ease: 'power2.out',
+    scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none reverse' },
+  });
+});
+
+/* hero entrance (load, not scroll) */
+if (JUMP === null) {
+  gsap.timeline({ defaults: { ease: 'power4.out' } })
+    .from('#wordmark .ch', { yPercent: 130, duration: 1.05, stagger: 0.055 }, 0.15)
+    .from('#heromark', { autoAlpha: 0, scale: 0.6, duration: 0.7 }, 0.1)
+    .from('#herosub', { autoAlpha: 0, y: 26, duration: 0.8 }, 0.7)
+    .from('#heroctas', { autoAlpha: 0, y: 20, duration: 0.7 }, 0.85)
+    .from('#hero .cue', { autoAlpha: 0, duration: 0.6 }, 1.1);
+}
+
+/* copy button */
+document.getElementById('copybtn').addEventListener('click', () => {
+  navigator.clipboard.writeText('npm install stellar-shade').then(() => {
+    const t = document.getElementById('cmdtext');
+    const old = t.textContent; t.textContent = 'copied';
+    setTimeout(() => { t.textContent = old; }, 1200);
+  });
+});
+
+/* relayout wires on resize */
+let rsT;
+addEventListener('resize', () => {
+  clearTimeout(rsT);
+  rsT = setTimeout(() => { layoutWires(); ScrollTrigger.refresh(); }, 200);
+});
+
+/* ————— dev contract ————— */
+const finish = () => {
+  ScrollTrigger.refresh();
+  if (JUMP !== null) {
+    window.scrollTo(0, +JUMP || 0);
+    ScrollTrigger.update();
+    ScrollTrigger.getAll().forEach(st => {
+      if (st.animation) st.animation.totalProgress(st.progress);
+    });
+    ScrollTrigger.update();
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => { window.__ready = true; }));
+};
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(finish);
+else addEventListener('load', finish);
+
+/* jank meter — rAF deltas; log only real spikes */
+let last = performance.now(), maxD = 0;
+const meter = now => {
+  const d = now - last; last = now;
+  if (d > maxD) maxD = d;
+  requestAnimationFrame(meter);
+};
+requestAnimationFrame(meter);
+setInterval(() => {
+  if (maxD > 50) console.log(`[jank] max rAF delta ${maxD.toFixed(1)}ms`);
+  window.__maxDelta = maxD; maxD = 0;
+}, 2000);
+})();
+</script>
+</body>
+</html>
