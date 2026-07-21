@@ -22,6 +22,7 @@ import { Field } from '@/components/ui/Field';
 import { CopyField } from '@/components/ui/CopyField';
 import { Notice } from '@/components/ui/Status';
 import { WalletModal } from '@/components/wallet/WalletModal';
+import { BackdropSquares } from '@/components/ui/BackdropSquares';
 import { ShadeMark } from '@/components/layout/ShadeMark';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 
@@ -60,33 +61,38 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
+      <BackdropSquares />
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
 
-      <div className="mx-auto flex min-h-full w-full max-w-lg flex-col justify-center px-5 py-16">
+      <div className="relative mx-auto flex min-h-full w-full max-w-lg flex-col justify-center px-5 py-16">
         <div className="mb-8 flex items-center gap-2.5">
           <ShadeMark className="size-6 text-copper-500" />
           <span className="text-lg font-bold tracking-tight text-ink-50">Shade</span>
         </div>
 
-        {step !== 'welcome' && (
-          <div className="mb-6 flex gap-1.5">
-            {STEPS.slice(1).map((s) => {
-              const idx = STEPS.indexOf(s);
-              const cur = STEPS.indexOf(step);
-              return (
+        {/* Progress stays mounted on every step (empty on welcome) so entering
+            step 2 doesn't shift the layout; each segment fills with a scaleX
+            sweep instead of a color snap. */}
+        <div className="mb-6 flex gap-1.5" aria-hidden>
+          {STEPS.slice(1).map((s) => {
+            const idx = STEPS.indexOf(s);
+            const cur = STEPS.indexOf(step);
+            const filled = step !== 'welcome' && idx <= cur;
+            return (
+              <span key={s} className="h-0.5 flex-1 overflow-hidden rounded-full bg-ink-700">
                 <span
-                  key={s}
-                  className={`h-0.5 flex-1 rounded-full transition-colors ${
-                    idx <= cur ? 'bg-copper-500' : 'bg-ink-700'
+                  className={`block h-full w-full origin-left bg-copper-500 transition-transform duration-500 ease-out motion-reduce:transition-none ${
+                    filled ? 'scale-x-100' : 'scale-x-0'
                   }`}
                 />
-              );
-            })}
-          </div>
-        )}
+              </span>
+            );
+          })}
+        </div>
 
+        <div key={step} className="animate-shade-rise">
         {step === 'welcome' && <WelcomeStep onNext={() => setStep('create')} />}
 
         {step === 'create' && (
@@ -134,6 +140,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             }}
           />
         )}
+        </div>
       </div>
     </div>
   );
@@ -144,6 +151,20 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 function WelcomeStep({ onNext }: { onNext: () => void }) {
   return (
     <div>
+      {/* The mark assembles itself: the shadow square slides into its offset —
+          the same beat the landing plays when a payment is claimed. */}
+      <svg width="76" height="76" viewBox="0 0 20 20" className="mb-7" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="10" height="10" className="fill-copper-500" />
+        <rect
+          x="7.5"
+          y="7.5"
+          width="10"
+          height="10"
+          fill="none"
+          strokeWidth="1.2"
+          className="animate-shade-assemble stroke-copper-500"
+        />
+      </svg>
       <h1 className="text-2xl font-bold tracking-tight text-ink-50">Welcome to Shade</h1>
       <p className="mt-3 text-sm leading-relaxed text-ink-300">
         Shade lets people pay you privately. Payments land at fresh one-time addresses that nobody
@@ -599,7 +620,8 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
               {words.map((word, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-1.5 border border-ink-700 bg-ink-900 px-2.5 py-1.5"
+                  style={{ animationDelay: `${i * 35}ms` }}
+                  className="animate-shade-rise flex items-center gap-1.5 border border-ink-700 bg-ink-900 px-2.5 py-1.5"
                 >
                   <span className="font-mono text-[10px] text-ink-600">{i + 1}</span>
                   <span className="font-mono text-[13px] text-ink-100">

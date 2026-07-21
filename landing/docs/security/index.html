@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security — Shade docs</title>
+<meta name="description" content="Shade's threat model: what stealth addresses protect, what they explicitly do not hide, key-management assumptions, audit status and known limitations.">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%230b0c0e"/><g transform="translate(96 96) scale(16)"><rect x="2.5" y="2.5" width="10" height="10" fill="%23c8763c"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="%23c8763c" stroke-width="1.4" opacity="0.55"/></g></svg>'>
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="hdr">
+  <a class="lockup" href="/"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/></svg><span class="word">Shade</span></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk on" href="/docs/" aria-current="true">Docs</a>
+    <a class="lnk" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn" href="/app/">Launch app</a>
+  </nav>
+</header>
+<div class="wrap">
+  <nav class="sb" aria-label="Documentation"><div class="sb-group"><div class="sb-label">Learn</div><a class="sb-link" href="/docs/">Introduction</a><a class="sb-link" href="/docs/concepts/">Core Concepts</a><a class="sb-link" href="/docs/architecture/">Architecture</a><a class="sb-link" href="/docs/delivery-methods/">Delivery Methods</a></div><div class="sb-group"><div class="sb-label">Build</div><a class="sb-link" href="/docs/getting-started/">Getting Started</a><a class="sb-link" href="/docs/cli/">CLI Reference</a><a class="sb-link" href="/docs/sdk/">SDK Reference</a><a class="sb-link" href="/docs/relayer/">Relayer</a></div><div class="sb-group"><div class="sb-label">Trust</div><a class="sb-link on" href="/docs/security/" aria-current="page">Security</a><a class="sb-link" href="/docs/faq/">FAQ & Troubleshooting</a></div></nav>
+  <main class="doc">
+    <p class="crumb">Docs · Trust</p>
+    <h1>Security</h1>
+    <p class="lead">Shade's threat model: what stealth addresses protect, what they explicitly do not hide, key-management assumptions, audit status and known limitations.</p>
+    <article class="prose"><p>What Shade protects, what it explicitly does not, and what you must not rely on yet. Read this page before putting value at risk.</p>
+<hr>
+<h2 id="status-pre-audit-not-for-mainnet"><a class="anchor" href="#status-pre-audit-not-for-mainnet" aria-label="Link to section">Status: pre-audit — not for mainnet</a></h2><p>The protocol and this implementation have <strong>not undergone an external cryptographic audit</strong>. An audit is on the roadmap. Treat the library as production-track but pre-audit, and <strong>do not handle mainnet value</strong>.</p>
+<p>Day-to-day development and testing run on the Docker local network. The <strong>pool</strong> method has been validated end-to-end on Stellar <strong>testnet</strong> (2026-07-17): deposit → scan → balance → direct withdraw → relayer fee-bumped withdraw, for both native XLM and a classic-asset (USDC) SAC. No testnet contract id is pinned (testnet resets quarterly — deploy your own). The <strong>account</strong> method is unexercised at public-network scale: its scan (and <code>balance</code>) walk the global Horizon transaction feed, so a cold scan for a fresh recipient is impractical there — a Horizon indexer is the roadmap fix.</p>
+<h2 id="threat-model"><a class="anchor" href="#threat-model" aria-label="Link to section">Threat model</a></h2><h3 id="what-shade-protects"><a class="anchor" href="#what-shade-protects" aria-label="Link to section">What Shade protects</a></h3><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Property</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Recipient identity</strong></td>
+<td>A stealth address is unlinkable to a meta-address without the view key. An observer sees <code>sender → contract</code> (pool) or <code>sender → one-time account</code> (account), plus <code>R</code> and <code>stealth_pk</code>, none of which reveal <em>you</em>.</td>
+</tr>
+<tr>
+<td><strong>Unlinkability between payments</strong></td>
+<td>Each payment uses a fresh random ephemeral <code>r</code>, so two stealth addresses for the same recipient look unrelated.</td>
+</tr>
+<tr>
+<td><strong>Your funded accounts</strong></td>
+<td>A relayer fee-bump means your own wallet never appears on the withdrawal.</td>
+</tr>
+<tr>
+<td><strong>Spend/view separation</strong></td>
+<td>The view key can find payments but never move them — safe to delegate to a scanner.</td>
+</tr>
+<tr>
+<td><strong>Replay across deployments/networks</strong></td>
+<td>The withdraw message binds the contract address <strong>and</strong> the network id, so a signature valid on one deployment is rejected on another.</td>
+</tr>
+<tr>
+<td><strong>Replay of the same withdrawal</strong></td>
+<td>A strictly-increasing per-key nonce in contract storage.</td>
+</tr>
+<tr>
+<td><strong>Reentrancy on withdraw</strong></td>
+<td>Checks-effects-interactions: nonce and balance are committed before the external SAC <code>transfer</code>.</td>
+</tr>
+<tr>
+<td><strong>Small-subgroup attacks</strong></td>
+<td><code>validatePoint</code> accepts only on-curve, <strong>torsion-free</strong> points, rejecting the identity and small-order points on every path that touches <code>R</code>, <code>K_view</code>, <code>K_spend</code>.</td>
+</tr>
+<tr>
+<td><strong>Announcement spam</strong></td>
+<td>Deposit and announcement are atomic — no deposit, no announcement.</td>
+</tr>
+<tr>
+<td><strong>Malicious relayer (sponsored claim)</strong></td>
+<td>The client re-derives the expected operation list from its own trusted inputs and refuses to sign a mismatch (<code>SponsoredClaimMismatchError</code>).</td>
+</tr>
+<tr>
+<td><strong>Tampered session storage</strong></td>
+<td>On unlock, public keys are re-derived from the decrypted private scalars and compared (<code>SessionIntegrityError</code>).</td>
+</tr>
+</tbody></table></div>
+<h3 id="what-shade-does-not-protect"><a class="anchor" href="#what-shade-does-not-protect" aria-label="Link to section">What Shade does NOT protect</a></h3><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Not protected</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Amounts</strong></td>
+<td>Deposit and withdrawal amounts are public on-chain.</td>
+</tr>
+<tr>
+<td><strong>The fact a payment occurred</strong></td>
+<td>Fully visible.</td>
+</tr>
+<tr>
+<td><strong>Fund flow</strong></td>
+<td><strong>Shade is not a mixer.</strong> A pool deposit and its withdrawal both name the same <code>stealth_pk</code>, so the flow is traceable. Only the link to your identity is hidden.</td>
+</tr>
+<tr>
+<td><strong>Timing correlation</strong></td>
+<td>Withdraw immediately after a deposit and the link is obvious.</td>
+</tr>
+<tr>
+<td><strong>Amount-pattern correlation</strong></td>
+<td>Distinctive amounts correlate deposits and withdrawals.</td>
+</tr>
+<tr>
+<td><strong>The withdrawal destination</strong></td>
+<td>Public — though it can be a fresh address with no history.</td>
+</tr>
+<tr>
+<td><strong>Your behaviour</strong></td>
+<td>Address reuse, a linked fee-payer, or a known destination will deanonymize you regardless of the cryptography.</td>
+</tr>
+</tbody></table></div>
+<h2 id="key-management-assumptions"><a class="anchor" href="#key-management-assumptions" aria-label="Link to section">Key-management assumptions</a></h2><ul>
+<li><strong>Spend private keys never leave the client.</strong></li>
+<li><strong>View keys enable scan-only access</strong> — safe to delegate, but see the revocation limit below.</li>
+<li><strong>Stealth private keys exist only in memory</strong> during a claim/withdraw.</li>
+<li><strong>All randomness</strong> comes from the platform CSPRNG (<code>crypto.getRandomValues()</code> / <code>randomBytes</code>).</li>
+<li><strong>Keystores are encrypted by default</strong> with AES-256-GCM (scrypt <code>N=131072, r=8, p=1</code>, files mode <code>0600</code>); <code>--plaintext</code> opts out.</li>
+<li><strong>Browser sessions</strong> use PBKDF2-SHA256 (600k) → AES-256-GCM; only public keys are stored in the clear.</li>
+</ul>
+<h3 id="the-raw-scalar-footgun"><a class="anchor" href="#the-raw-scalar-footgun" aria-label="Link to section">The raw-scalar footgun</a></h3><aside class="callout error"><p class="co-t">This one loses funds</p>
+
+<p><code>recoverStealthPrivateKey</code> returns a <strong>raw ed25519 scalar</strong> (<code>k_spend + s mod L</code>), <em>not</em> a seed. It must be signed with <code>signWithStealthKey</code>. Constructing a keypair from it via <code>Keypair.fromRawEd25519Seed()</code> (or any seed-based API) <strong>hashes</strong> the input to a different signing scalar — the resulting key does not match the stealth public key, the contract rejects the signature, and <strong>the funds become unwithdrawable</strong>.</p>
+</aside>
+
+
+<h3 id="wallet-derived-keys-an-accepted-trade-off"><a class="anchor" href="#wallet-derived-keys-an-accepted-trade-off" aria-label="Link to section">Wallet-derived keys: an accepted trade-off</a></h3><p>With the wallet-signature path, <strong>wallet compromise equals stealth-key compromise</strong> — anyone who can produce the signature can re-derive the keys. That is the accepted deal for keyless recovery.</p>
+<p>Two hard rules:</p>
+<ul>
+<li><strong>Never sign the derivation message anywhere you don&#39;t trust.</strong> Signing it hands over the ability to derive (and control) your stealth keys. The message includes an explicit warning line for exactly this reason.</li>
+<li><strong>The signer must be deterministic</strong> (RFC 8032). A randomized signer derives different, unrecoverable keys on every call. The SDK verifies determinism by default (signs twice and compares) rather than letting you find out later.</li>
+</ul>
+<h3 id="no-view-key-revocation"><a class="anchor" href="#no-view-key-revocation" aria-label="Link to section">No view-key revocation</a></h3><aside class="callout warn"><p class="co-t">There is no undo</p>
+
+<p>Sharing your view key is <strong>permanent and irreversible</strong>. A viewer sees all your incoming payments, past and future. To stop them you must generate new keys and publish a new meta-address — and old payments remain visible to the old viewer.</p>
+</aside>
+
+
+<h2 id="cryptographic-notes"><a class="anchor" href="#cryptographic-notes" aria-label="Link to section">Cryptographic notes</a></h2><ul>
+<li><strong>Curve:</strong> ed25519, order <code>L = 2^252 + 27742317777372353535851937790883648493</code>.</li>
+<li><strong>Primitives:</strong> <code>@noble/curves</code> / <code>@noble/hashes</code> — the same audited primitives used broadly across the Stellar ecosystem — plus <code>@scure/bip39</code>.</li>
+<li><strong>The ECDH runs client-side by necessity.</strong> Soroban&#39;s host exposes <code>ed25519_verify</code>, <code>sha256</code>, <code>secp256r1_verify</code>, and curve operations for <strong>BLS12-381</strong> (CAP-0059) and <strong>BN254</strong> — but <strong>no Curve25519 scalar-multiplication host function</strong>. The contract only ever <em>verifies</em> an ed25519 signature.</li>
+<li><strong>No BIP-32/44.</strong> HD derivation uses domain-separated SHA-256, not standard BIP-32 paths (those are defined over secp256k1). Recovery works within Shade&#39;s own scheme.</li>
+<li><strong>Deterministic signing.</strong> <code>signWithStealthKey</code> builds an RFC 8032-style signature directly from the raw scalar, with a deterministic nonce <code>r = SHA-512(scalar ‖ message) mod L</code>. Signatures verify with standard <code>ed25519.verify</code>.</li>
+<li><strong>Amount encryption</strong> (<code>encryptAmount</code> / <code>decryptAmount</code>) is encrypt-then-MAC (XOR keystream + HMAC-SHA256) with constant-time tag verification. It is <strong>not used by the pool contract</strong> — it exists for applications built on top.</li>
+</ul>
+<h2 id="known-limitations-and-open-risks"><a class="anchor" href="#known-limitations-and-open-risks" aria-label="Link to section">Known limitations and open risks</a></h2><h3 id="protocol-product"><a class="anchor" href="#protocol-product" aria-label="Link to section">Protocol / product</a></h3><ul>
+<li><strong>Destination account must exist.</strong> A pool withdrawal needs an active Stellar destination (its own ~1 XLM reserve). Fund it via an exchange withdrawal for best privacy, or use a relayer-sponsored claim.</li>
+<li><strong><code>spp</code> is not implemented</strong> — a reserved slot that always throws.</li>
+<li><strong>No external audit.</strong></li>
+</ul>
+<h3 id="implementation-gaps-worth-knowing"><a class="anchor" href="#implementation-gaps-worth-knowing" aria-label="Link to section">Implementation gaps worth knowing</a></h3><ul>
+<li><strong>Relayer defaults are permissive.</strong> <code>RELAYER_REQUIRE_CREDIT=0</code> leaves <code>/relay</code> and <code>/sponsor-claim/submit</code> unauthenticated; <code>CORS_ORIGIN</code> defaults to <code>*</code>; an unset <code>RELAYER_SECRET</code> boots an unfunded random keypair. See <a href="/docs/relayer/#operational-warnings">Relayer</a>.</li>
+<li><strong>Relayer state is single-node and non-durable.</strong> The credit ledger is a JSON file (wiped by an ephemeral-filesystem restart, taking consumed-tx idempotency with it); challenge nonces and rate-limit buckets are in-memory.</li>
+<li><strong>State archival.</strong> If a <code>Balance</code>/<code>Nonce</code> entry archives, a withdraw over the archived footprint fails on-chain while <code>get_balance</code> still reports the funds. The SDK restores automatically; if the restore itself fails you get <code>EntryArchivedRestoringError</code> — <strong>the funds are safe</strong>, but the withdraw can&#39;t proceed until the entry is restored. Read-path TTL extension (<code>get_balance</code>/<code>get_nonce</code> bump a live entry back to ~1 year) makes this unlikely for anyone who scans periodically.</li>
+</ul>
+<h2 id="user-responsibility"><a class="anchor" href="#user-responsibility" aria-label="Link to section">User responsibility</a></h2><p>The cryptography gives you the tools; you can still deanonymize yourself:</p>
+<ul>
+<li><strong>Vary timing.</strong> Don&#39;t withdraw right after a deposit.</li>
+<li><strong>Vary amounts.</strong> Partial withdrawals reduce correlation with the original deposit.</li>
+<li><strong>Use fresh destination addresses</strong> with no history.</li>
+<li><strong>Never pay the fee from an account linked to you</strong> — that&#39;s what the relayer is for.</li>
+<li><strong>Guard your view key.</strong> Sharing it is permanent.</li>
+</ul>
+<h2 id="reporting"><a class="anchor" href="#reporting" aria-label="Link to section">Reporting</a></h2><p>This project is pre-audit and provided as-is.</p>
+<aside class="callout info"><p class="co-t">Found a vulnerability?</p>
+
+<p>Email <a href="mailto:hello@stellar-shade.com">hello@stellar-shade.com</a>. Please report it privately rather than opening a public issue, so the problem can be fixed before it is widely known.</p>
+</aside>
+
+
+<hr>
+<h2 id="next-steps"><a class="anchor" href="#next-steps" aria-label="Link to section">Next steps</a></h2><ul>
+<li><a href="/docs/concepts/">Core Concepts</a> — the cryptography these guarantees rest on</li>
+<li><a href="/docs/architecture/">Architecture</a> — where each control is implemented</li>
+<li><a href="/docs/relayer/">Relayer</a> — operational hardening</li>
+<li><a href="/docs/faq/">FAQ &amp; Troubleshooting</a> — what specific errors mean</li>
+</ul>
+</article>
+    <nav class="pnrow" aria-label="Pagination"><a class="pn prev" href="/docs/relayer/"><span class="pn-k">← Previous</span><span class="pn-t">Relayer</span></a><a class="pn next" href="/docs/faq/"><span class="pn-k">Next →</span><span class="pn-t">FAQ & Troubleshooting</span></a></nav>
+  </main>
+</div>
+<footer class="foot">Shade — stealth addresses on Stellar · testnet · cryptography pending external audit</footer>
+</body>
+</html>

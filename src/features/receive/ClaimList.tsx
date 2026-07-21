@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Inbox, Radio, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Radio, ShieldCheck } from 'lucide-react';
 import type { Payment } from 'stellar-shade';
 import { stealthClient } from '@/lib/shade';
 import { NETWORK } from '@/config/network';
@@ -34,6 +34,8 @@ export function ClaimList() {
 
   const health = useServiceHealth();
   const [claiming, setClaiming] = useState<string | null>(null);
+  // Rows fade out for a beat before markClaimed removes them from `available`.
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
   const [claimingAll, setClaimingAll] = useState(false);
   // Claiming everything at once is the most deanonymizing action here, so the
   // Claim-all button opens an inline privacy warning first rather than running.
@@ -115,7 +117,8 @@ export function ClaimList() {
       });
 
       updateTx(txId, { status: 'success', txHash: receipt.txHash });
-      scan.markClaimed(payment.stealthAddress);
+      setLeaving((s) => new Set(s).add(payment.stealthAddress));
+      window.setTimeout(() => scan.markClaimed(payment.stealthAddress), 320);
       return true;
     } catch (err) {
       const message = toUserMessage(err);
@@ -200,7 +203,7 @@ export function ClaimList() {
   return (
     <div>
       {result && (
-        <div className="p-5 pb-0">
+        <div key={`${result.status}:${result.message}`} className="animate-shade-rise p-5 pb-0">
           <TxResult
             status={result.status}
             message={result.message}
@@ -217,11 +220,14 @@ export function ClaimList() {
       )}
 
       {available.length === 0 ? (
-        <EmptyState
-          icon={<Inbox className="size-6" />}
-          title="Nothing waiting"
-          description="Payments sent to your meta-address will appear here once the ledger closes. Share your meta-address or publish it to get started."
-        />
+        <div>
+          <EmptyState
+            icon={<Radio className="animate-shade-pulse size-6" />}
+            title="Nothing waiting"
+            description="Payments sent to your meta-address will appear here once the ledger closes. Share your meta-address or publish it to get started."
+          />
+          <LastSynced at={scan.lastSyncedAt} loading={scan.loading} />
+        </div>
       ) : (
         <>
           {available.length > 1 && (
@@ -243,8 +249,17 @@ export function ClaimList() {
                 </Button>
               </div>
 
+              {claimingAll && progress && (
+                <div className="h-0.5 bg-ink-700" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done}>
+                  <div
+                    className="h-full bg-copper-500 transition-all duration-300 ease-out"
+                    style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                  />
+                </div>
+              )}
+
               {confirmingAll && !claimingAll && (
-                <div className="px-5 pb-4">
+                <div className="animate-shade-rise px-5 pb-4">
                   <Notice tone="warn">
                     <p className="font-medium text-signal-wait">Claiming all at once reduces your privacy.</p>
                     <p className="mt-1.5 text-ink-300">
@@ -290,10 +305,14 @@ export function ClaimList() {
               const needsTrustline =
                 external && payment.method === 'account' && payment.token !== 'native';
               const open = showOverride[addr] ?? false;
+              const isNew = scan.lastNewPayments.some((n) => n.stealthAddress === addr);
+              const isLeaving = leaving.has(addr);
               return (
                 <li
                   key={`${addr}:${payment.token}`}
-                  className="px-4 py-4 transition-colors hover:bg-ink-800/40 sm:px-5"
+                  className={`px-4 py-4 transition-all duration-300 hover:bg-ink-800/40 sm:px-5 ${
+                    isNew ? 'animate-shade-flash' : ''
+                  } ${isLeaving ? 'pointer-events-none -translate-y-1 opacity-0' : ''}`}
                 >
                   <div className="flex items-center gap-3 sm:gap-4">
                     <ShieldCheck className="size-4 shrink-0 text-copper-500" />
@@ -419,5 +438,22 @@ export function ClaimList() {
         </span>
       </div>
     </div>
+  );
+}
+
+/**
+ * Quiet "the engine is running" line for the empty state: last sync time that
+ * actually ticks, so the 45s auto-scan reads as presence instead of absence.
+ */
+function LastSynced({ at, loading }: { at: number | null; loading: boolean }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 10_000);
+    return () => window.clearInterval(t);
+  }, []);
+  return (
+    <p className="border-t border-ink-700 px-5 py-2.5 text-center font-mono text-[10px] uppercase tracking-wider text-ink-500">
+      {loading ? 'scanning the ledger…' : at ? `watching for payments · last checked ${timeAgo(at)}` : 'watching for payments'}
+    </p>
   );
 }

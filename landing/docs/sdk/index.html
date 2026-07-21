@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SDK Reference — Shade docs</title>
+<meta name="description" content="The @shade/sdk and @shade/crypto API: StealthClient, types, typed errors, Freighter signing, encrypted sessions and the stealth-address primitives.">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%230b0c0e"/><g transform="translate(96 96) scale(16)"><rect x="2.5" y="2.5" width="10" height="10" fill="%23c8763c"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="%23c8763c" stroke-width="1.4" opacity="0.55"/></g></svg>'>
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="hdr">
+  <a class="lockup" href="/"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/></svg><span class="word">Shade</span></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk on" href="/docs/" aria-current="true">Docs</a>
+    <a class="lnk" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn" href="/app/">Launch app</a>
+  </nav>
+</header>
+<div class="wrap">
+  <nav class="sb" aria-label="Documentation"><div class="sb-group"><div class="sb-label">Learn</div><a class="sb-link" href="/docs/">Introduction</a><a class="sb-link" href="/docs/concepts/">Core Concepts</a><a class="sb-link" href="/docs/architecture/">Architecture</a><a class="sb-link" href="/docs/delivery-methods/">Delivery Methods</a></div><div class="sb-group"><div class="sb-label">Build</div><a class="sb-link" href="/docs/getting-started/">Getting Started</a><a class="sb-link" href="/docs/cli/">CLI Reference</a><a class="sb-link on" href="/docs/sdk/" aria-current="page">SDK Reference</a><a class="sb-link" href="/docs/relayer/">Relayer</a></div><div class="sb-group"><div class="sb-label">Trust</div><a class="sb-link" href="/docs/security/">Security</a><a class="sb-link" href="/docs/faq/">FAQ & Troubleshooting</a></div></nav>
+  <main class="doc">
+    <p class="crumb">Docs · Build</p>
+    <h1>SDK Reference</h1>
+    <p class="lead">The @shade/sdk and @shade/crypto API: StealthClient, types, typed errors, Freighter signing, encrypted sessions and the stealth-address primitives.</p>
+    <article class="prose"><p>Two packages ship on npm for application developers:</p>
+<ul>
+<li><strong><code>@shade/crypto</code></strong> — pure stealth-address math (keys, scanning, recovery, HD/mnemonic). <strong>Zero</strong> Stellar dependency; usable anywhere.</li>
+<li><strong><code>@shade/sdk</code></strong> — the batteries-included client. Wraps all Horizon/Soroban I/O behind <code>StealthClient</code>, so you never touch DKSAP math or transaction XDR.</li>
+</ul>
+<p>Install with <code>npm install @shade/sdk</code>, or <code>npm install @shade/crypto</code> alone for just the primitives. Every symbol on this page is exported from the package named in its heading.</p>
+<hr>
+<h2 id="quick-start"><a class="anchor" href="#quick-start" aria-label="Link to section">Quick start</a></h2><div class="codeblock"><span class="codelang">typescript</span><pre><code>
+
+const client = new StealthClient({
+  network: 'testnet',
+  contractId: 'C...',                 // required when the pool method is enabled
+  methods: ['pool', 'account'],
+  relayer: 'https://your-relayer.example', // optional
+});
+
+const bob = StealthClient.keygen();   // share bob.metaAddress ("shade:stellar:...")
+
+await client.send(bob.metaAddress, 100, aliceSecret, { method: 'auto' });
+
+const payments = await client.scan(bob);
+await client.claim(payments[0], bobPublicKey, { keys: bob, feePayer: feePayerSecret });</code></pre></div><hr>
+<h2 id="stealthclient"><a class="anchor" href="#stealthclient" aria-label="Link to section"><code>StealthClient</code></a></h2><h3 id="constructor"><a class="anchor" href="#constructor" aria-label="Link to section">Constructor</a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>new StealthClient(config: ClientConfig)</code></pre></div><div class="codeblock"><span class="codelang">typescript</span><pre><code>interface ClientConfig {
+  network: 'local' | 'testnet';
+  contractId?: string;    // required whenever 'pool' is enabled (default exists only for 'local')
+  horizonUrl?: string;    // override the Horizon endpoint (account method)
+  methods?: DeliveryMethod[];  // default: ['pool']
+  relayer?: string;       // default relayer URL for fee-bumped submissions
+}</code></pre></div><p>Throws <strong><code>ContractIdRequiredError</code></strong> if <code>&#39;pool&#39;</code> is enabled and no contract id resolves — failing loudly here instead of surfacing an opaque Soroban error on the first pool call.</p>
+<h3 id="static-methods"><a class="anchor" href="#static-methods" aria-label="Link to section">Static methods</a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>StealthClient.keygen(): StealthKeys
+StealthClient.fromMnemonic(mnemonic?: string): StealthKeys &amp; { mnemonic: string }</code></pre></div><p>Both are offline — no network needed. <code>fromMnemonic()</code> generates a phrase when called with no argument and returns it alongside the keys for backup.</p>
+<h3 id="send"><a class="anchor" href="#send" aria-label="Link to section"><code>send</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>send(
+  metaAddress: string,
+  amount: number,
+  senderSecret: string,
+  opts?: SendOpts,
+): Promise&lt;SendReceipt&gt;</code></pre></div><p>A method is <strong>required</strong> on every call. Throws <code>MethodRequiredError</code> if <code>opts.method</code> is missing, <code>MethodNotEnabledError</code> if the resolved method isn&#39;t in <code>config.methods</code>.</p>
+<p>With an external signer, pass the sender&#39;s <strong>public</strong> <code>G...</code> address in the <code>senderSecret</code> position.</p>
+<h3 id="scan-scanwithcursor"><a class="anchor" href="#scan-scanwithcursor" aria-label="Link to section"><code>scan</code> / <code>scanWithCursor</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>scan(keys: StealthKeys): Promise&lt;Payment[]&gt;
+scanWithCursor(keys: StealthKeys, opts?: ScanOpts): Promise&lt;ScanResult&gt;</code></pre></div><p><code>scan</code> is the simple form. <code>scanWithCursor</code> returns an updated per-method cursor to persist and pass to the next call for incremental discovery.</p>
+<h3 id="balance"><a class="anchor" href="#balance" aria-label="Link to section"><code>balance</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>balance(keys: StealthKeys): Promise&lt;Balance[]&gt;</code></pre></div><p>Like a scan, but suppresses fully-swept/merged native accounts (live balance 0) so a spent stealth account is never reported as spendable.</p>
+<h3 id="claim"><a class="anchor" href="#claim" aria-label="Link to section"><code>claim</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>claim(
+  payment: Payment,
+  destination: string,
+  opts: ClaimOpts,
+): Promise&lt;ClaimReceipt&gt;</code></pre></div><p>Takes a <code>Payment</code> returned from <code>scan</code> and branches on its <code>method</code>: <code>&#39;pool&#39;</code> → signed withdraw; <code>&#39;account&#39;</code> → sweep / partial payout / sponsored claim.</p>
+<h3 id="withdraw-deprecated"><a class="anchor" href="#withdraw-deprecated" aria-label="Link to section"><code>withdraw</code> — deprecated</a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>withdraw(
+  stealthAddress: string,
+  destination: string,
+  opts: WithdrawOpts,
+): Promise&lt;WithdrawReceipt&gt;</code></pre></div><aside class="callout warn"><p class="co-t">Deprecated</p>
+
+<p>Use <code>claim()</code> with a pool payment. Retained for backwards compatibility; behaves exactly like the original pool withdraw. Requires the <code>&#39;pool&#39;</code> method to be enabled, else throws <code>MethodNotAvailableError</code>.</p>
+</aside>
+
+
+<hr>
+<h2 id="types-shadesdk"><a class="anchor" href="#types-shadesdk" aria-label="Link to section">Types (<code>@shade/sdk</code>)</a></h2><div class="codeblock"><span class="codelang">typescript</span><pre><code>type DeliveryMethod = 'pool' | 'account' | 'spp';
+
+interface StealthKeys {
+  metaAddress: string;   // shade:stellar:... — share publicly
+  spendPubKey: string;   // hex
+  spendPrivKey: string;  // hex — NEVER share
+  viewPubKey: string;    // hex
+  viewPrivKey: string;   // hex — safe to share with scanning services
+}
+
+interface SendReceipt {
+  stealthAddress: string;
+  txHash: string;
+}
+
+interface Payment {
+  stealthAddress: string;
+  ephemeralPubKey: string;      // hex
+  token: string;                // SAC contract address, or 'native'
+  asset?: string;               // "CODE:ISSUER" / 'native' (account-method token payments)
+  claimableBalanceId?: string;  // present =&gt; this is a token claim
+  amount: number;               // whole units
+  amountStroops?: string;       // exact stroop count — prefer this over `amount`
+  method: DeliveryMethod;
+  txHash?: string;
+}
+
+interface Balance {
+  stealthAddress: string;
+  token: string;
+  amount: number;
+  amountStroops?: string;
+}
+
+interface ClaimReceipt { txHash: string; amount: number; method: DeliveryMethod; }
+interface WithdrawReceipt { txHash: string; amount: number; }
+
+interface ScanCursor { pool?: string; account?: string; spp?: string; }
+interface ScanOpts   { methods?: DeliveryMethod[]; cursor?: ScanCursor; }
+interface ScanResult { payments: Payment[]; cursor: ScanCursor; }</code></pre></div><aside class="callout info"><p class="co-t">Precision</p>
+
+<p><code>amount</code> is a <code>number</code> for display and backwards compatibility. Above ~9.007e8 XLM a double cannot represent every stroop — use <code>amountStroops</code> whenever exactness matters. The SDK itself derives token payout strings from the exact stroop count, never the lossy double.</p>
+</aside>
+
+
+<h3 id="sendopts"><a class="anchor" href="#sendopts" aria-label="Link to section"><code>SendOpts</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>interface SendOpts {
+  method: DeliveryMethod | 'auto';   // REQUIRED
+  asset?: string;                    // "CODE:ISSUER"; default native XLM
+  signTransaction?: TransactionSigner;
+  feePayerAddress?: string;          // unused by send(); present for symmetry
+}</code></pre></div><h3 id="claimopts"><a class="anchor" href="#claimopts" aria-label="Link to section"><code>ClaimOpts</code></a></h3><div class="codeblock"><span class="codelang">typescript</span><pre><code>interface ClaimOpts {
+  keys: StealthKeys;          // required
+  relay?: string;             // fee-bumped submission
+  merge?: boolean;            // account method: sweep via AccountMerge (default true)
+  feePayer?: string;          // pool method: secret paying the Soroban fee
+  asset?: string;             // pool method
+  amount?: number;            // partial claim
+  sponsored?: boolean;        // account-method token claim via the relayer
+  fundingAccount?: string;    // credit-gated relayer: account to debit
+  signTransaction?: TransactionSigner;
+  feePayerAddress?: string;   // required when signTransaction is set on a pool claim
+}</code></pre></div><hr>
+<h2 id="external-signing-freighter"><a class="anchor" href="#external-signing-freighter" aria-label="Link to section">External signing (Freighter)</a></h2><p>A web app should <strong>never</strong> hold a raw secret. Pass a signer function instead:</p>
+<div class="codeblock"><span class="codelang">typescript</span><pre><code>type TransactionSigner = (
+  xdr: string,
+  opts: { networkPassphrase: string; address?: string },
+) =&gt; Promise&lt;string&gt;;</code></pre></div><div class="codeblock"><span class="codelang">typescript</span><pre><code>
+
+const signTransaction = async (xdr: string) =&gt; {
+  const { signedTxXdr } = await freighterApi.signTransaction(xdr, { networkPassphrase });
+  return signedTxXdr;
+};
+
+// Pass a G-address where a secret normally goes.
+await client.send(bob.metaAddress, 100, alicePublicKey, {
+  method: 'account',
+  signTransaction,
+});</code></pre></div><p><strong>The security boundary:</strong> the signer only ever applies to the <strong>sender</strong> and <strong>fee-payer</strong> legs — the ordinary Stellar signatures. The <strong>stealth-key</strong> legs always sign locally inside the SDK, because a wallet cannot hold a key it never generated. <em>Your wallet never touches the stealth scalar.</em></p>
+<p>On a pool claim with a signer you must also pass <code>feePayerAddress</code> (the fee payer&#39;s <code>G...</code>), or you get <code>FeePayerAddressRequiredError</code> — this prevents the SDK from ever calling <code>Keypair.fromSecret</code> on a public key.</p>
+<hr>
+<h2 id="wallet-derived-keys"><a class="anchor" href="#wallet-derived-keys" aria-label="Link to section">Wallet-derived keys</a></h2><div class="codeblock"><span class="codelang">typescript</span><pre><code>
+
+const keys = await keysFromWalletSignature(
+  (msg) =&gt; freighter.signMessage(msg),
+  { appId: 'my-app' },
+);</code></pre></div><div class="codeblock"><span class="codelang">typescript</span><pre><code>interface WalletKeysOpts {
+  keyScope?: string;            // default 'stealth' — decoupled from the transport network
+  appId?: string;               // default 'default'
+  verifyDeterminism?: boolean;  // default TRUE — signs twice and throws if they differ
+}</code></pre></div><p>Determinism is verified <strong>by default</strong>: a randomized or non-canonical signer would derive different (unrecoverable) keys on every call, so it fails loudly instead. Pass <code>verifyDeterminism: false</code> only for a signer you know is RFC 8032 deterministic.</p>
+<p><code>keyScope</code> / <code>appId</code> must <strong>match across every tool</strong> deriving from the same wallet. The defaults line up with the CLI&#39;s <code>--key-scope</code> / <code>--app-id</code>.</p>
+<hr>
+<h2 id="sessions-stealthsession"><a class="anchor" href="#sessions-stealthsession" aria-label="Link to section">Sessions (<code>StealthSession</code>)</a></h2><p>Cookie-free browser sessions over any key/value store:</p>
+<div class="codeblock"><span class="codelang">typescript</span><pre><code>
+
+const session = new StealthSession({ storage: window.localStorage });
+await session.saveKeys(keys, password);
+// ... later ...
+await session.unlock(password);
+const keys = session.keys;</code></pre></div><div class="codeblock"><span class="codelang">typescript</span><pre><code>interface KVStorage {
+  getItem(key: string): string | null | Promise&lt;string | null&gt;;
+  setItem(key: string, value: string): void | Promise&lt;void&gt;;
+  removeItem(key: string): void | Promise&lt;void&gt;;
+}</code></pre></div><p>Methods: <code>saveKeys</code>, <code>unlock</code>, <code>lock</code>, <code>hasKeys</code>, <code>clear</code>, <code>loadScanState</code>, <code>saveScanState</code>; getter <code>keys</code>.</p>
+<p><strong>Crypto:</strong> PBKDF2-SHA256 (600,000 iterations) → AES-256-GCM, via <code>globalThis.crypto.subtle</code> only (browsers and Node 18+). Public keys are stored in the clear; private keys and scan state are encrypted. This is intentionally separate from the CLI keystore (which uses Node&#39;s scrypt).</p>
+<p><strong>Integrity:</strong> on <code>unlock</code>, both public keys are re-derived from the decrypted private scalars and compared to the stored cleartext pubkeys — a storage-write attacker cannot swap in a wrong pubkey and silently break scanning. Mismatch throws <code>SessionIntegrityError</code>; a bad password throws <code>WrongPasswordError</code>.</p>
+<hr>
+<h2 id="relayerclient"><a class="anchor" href="#relayerclient" aria-label="Link to section"><code>RelayerClient</code></a></h2><div class="codeblock"><span class="codelang">typescript</span><pre><code>
+
+const relayer = new RelayerClient('http://localhost:3000');
+const { status } = await relayer.health();</code></pre></div><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>health()</code></td>
+<td>Status, balance, address</td>
+</tr>
+<tr>
+<td><code>relay(xdr, opts?)</code></td>
+<td>Fee-bump and submit a signed envelope</td>
+</tr>
+<tr>
+<td><code>sponsor(address, opts?)</code></td>
+<td>Create a stealth account from the relayer&#39;s balance</td>
+</tr>
+<tr>
+<td><code>sponsorClaimPrepare(args)</code></td>
+<td>Build the sponsored claim tx (returns unsigned XDR)</td>
+</tr>
+<tr>
+<td><code>sponsorClaimSubmit(xdr, args)</code></td>
+<td>Co-sign + submit a sponsored claim</td>
+</tr>
+<tr>
+<td><code>creditClaim(fundingAccount, txHash)</code></td>
+<td>Top up credit by proving an XLM payment</td>
+</tr>
+<tr>
+<td><code>creditBalance(fundingAccount)</code></td>
+<td>Read a credit balance</td>
+</tr>
+</tbody></table></div>
+<p>Also exported: <code>challengeMessage(endpoint, fundingAccount, nonce, amount, bind?)</code> — the canonical proof-of-control message, which must match the relayer byte-for-byte. See <a href="/docs/relayer/">Relayer</a>.</p>
+<hr>
+<h2 id="typed-errors"><a class="anchor" href="#typed-errors" aria-label="Link to section">Typed errors</a></h2><p>All exported from <code>@shade/sdk</code> so apps can branch cleanly. Every error extends a shared <strong><code>ShadeError</code></strong> base and carries a stable <strong><code>code</code></strong> string (e.g. <code>method_required</code>, <code>transaction_timeout</code>) — branch on <code>e.code</code> when <code>instanceof</code> is unreliable across bundling/realm boundaries:</p>
+<div class="codeblock"><span class="codelang">typescript</span><pre><code>
+         AnnouncementNotFoundError, StealthAccountNotFoundError,
+         DestinationTrustlineError, FeePayerRequiredError,
+         TransactionTimeoutError, ClaimAmountRequiresNoMergeError,
+         SponsoredClaimMismatchError, ShadeError } from '@shade/sdk';
+
+try {
+  await client.claim(payment, dest, { keys });
+} catch (e) {
+  if (e instanceof DestinationTrustlineError) { /* add a trustline first */ }
+}</code></pre></div><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Thrown when</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MethodRequiredError</code></td>
+<td><code>send()</code> called without <code>opts.method</code></td>
+</tr>
+<tr>
+<td><code>MethodNotEnabledError</code></td>
+<td>Requested method isn&#39;t in <code>config.methods</code></td>
+</tr>
+<tr>
+<td><code>MethodNotAvailableError</code></td>
+<td>Method exists but can&#39;t service the request (e.g. <code>spp</code>)</td>
+</tr>
+<tr>
+<td><code>MinimumAmountError</code></td>
+<td>Account-method XLM send ≤ 1 XLM</td>
+</tr>
+<tr>
+<td><code>ClaimAmountError</code></td>
+<td>Partial account claim exceeds the max (carries <code>.max</code>)</td>
+</tr>
+<tr>
+<td><code>InvalidAmountError</code></td>
+<td>Amount isn&#39;t a positive finite number</td>
+</tr>
+<tr>
+<td><code>SponsoredClaimMismatchError</code></td>
+<td>Relayer-prepared XDR doesn&#39;t match your own inputs — <strong>refuses to sign</strong></td>
+</tr>
+<tr>
+<td><code>WrongPasswordError</code></td>
+<td>Session decryption failed</td>
+</tr>
+<tr>
+<td><code>SessionIntegrityError</code></td>
+<td>Stored pubkey ≠ pubkey derived from decrypted private key</td>
+</tr>
+<tr>
+<td><code>NoBalanceError</code></td>
+<td>Pool address holds nothing for that asset</td>
+</tr>
+<tr>
+<td><code>AnnouncementNotFoundError</code></td>
+<td>No announcement matches these keys</td>
+</tr>
+<tr>
+<td><code>StealthAccountNotFoundError</code></td>
+<td>Stealth account missing on Horizon (send not confirmed?)</td>
+</tr>
+<tr>
+<td><code>DestinationTrustlineError</code></td>
+<td>Destination doesn&#39;t trust the asset</td>
+</tr>
+<tr>
+<td><code>FeePayerRequiredError</code></td>
+<td>Pool withdraw with no fee-payer secret (non-signer path)</td>
+</tr>
+<tr>
+<td><code>FeePayerAddressRequiredError</code></td>
+<td><code>signTransaction</code> set on a pool claim without <code>feePayerAddress</code></td>
+</tr>
+<tr>
+<td><code>EntryArchivedRestoringError</code></td>
+<td>Entry archived and the automatic restore failed (funds safe; retry)</td>
+</tr>
+<tr>
+<td><code>TransactionRetryableError</code></td>
+<td>RPC returned a non-terminal status — nothing landed, safe to retry (has <code>.retryable</code>)</td>
+</tr>
+<tr>
+<td><code>TransactionTimeoutError</code></td>
+<td>Submission stayed PENDING past the timeout — carries <code>.txHash</code> and <code>.retryable = false</code>; the tx <strong>may still land</strong>, so poll the hash, do NOT blindly resubmit</td>
+</tr>
+<tr>
+<td><code>ClaimAmountRequiresNoMergeError</code></td>
+<td><code>claim({ amount })</code> given with an effective merge (account native) or on a token claim — refuses rather than silently sweeping the full balance</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="helpers"><a class="anchor" href="#helpers" aria-label="Link to section">Helpers</a></h2><div class="codeblock"><span class="codelang">typescript</span><pre><code>
+         labelForToken, resolveTokenAddress,
+         prepareWithRestore, HorizonClient,
+         PoolAdapter, AccountAdapter, SppAdapter } from '@shade/sdk';</code></pre></div><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Helper</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>parseStroops(s)</code> / <code>numberToStroops(n)</code> / <code>formatStroops(b)</code></td>
+<td>Exact stroop conversion (no float drift)</td>
+</tr>
+<tr>
+<td><code>resolveTokenAddress(asset, passphrase)</code></td>
+<td><code>&#39;native&#39;</code> / <code>&#39;CODE:ISSUER&#39;</code> → SAC contract address</td>
+</tr>
+<tr>
+<td><code>labelForToken(address, passphrase)</code></td>
+<td>Native SAC address → <code>&#39;XLM&#39;</code>; otherwise unchanged</td>
+</tr>
+<tr>
+<td><code>prepareWithRestore(...)</code></td>
+<td>Restore-aware Soroban prepare (see <a href="/docs/architecture/">Architecture</a>)</td>
+</tr>
+<tr>
+<td><code>HorizonClient</code></td>
+<td>Injectable-fetch Horizon wrapper (testable offline)</td>
+</tr>
+<tr>
+<td><code>PoolAdapter</code> / <code>AccountAdapter</code> / <code>SppAdapter</code></td>
+<td>The delivery adapters, if you need them directly</td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="shadecrypto"><a class="anchor" href="#shadecrypto" aria-label="Link to section"><code>@shade/crypto</code></a></h2><p>The primitives, if you&#39;re not using the SDK:</p>
+<div class="codeblock"><span class="codelang">typescript</span><pre><code>
+  generateMetaAddress, encodeMetaAddress, decodeMetaAddress,
+  deriveStealthAddress, computeStealthAddress, deriveStealthAddressWithSecret,
+  scanAnnouncements, checkViewTag, isMyStealthAddress,
+  recoverStealthPrivateKey, signWithStealthKey, proveOwnership, verifyOwnership,
+  encodePublicKey, decodePublicKey,
+  generateMnemonic, validateMnemonic, mnemonicToStealthKeys,
+  buildKeyDerivationMessage, deriveKeysFromSignature, KEY_DERIVATION_CONTEXT_V1,
+  encryptAmount, decryptAmount,
+  L, validatePoint, pointAdd, scalarMult, scalarMultBase, scalarAdd,
+  generateRandomScalar, hashToScalar, viewTag,
+} from '@shade/crypto';</code></pre></div><h3 id="types"><a class="anchor" href="#types" aria-label="Link to section">Types</a></h3><p>All six exported types work in <strong>raw bytes</strong> (<code>Uint8Array</code>), not hex strings:</p>
+<div class="codeblock"><span class="codelang">typescript</span><pre><code>/** The public halves of both keys — what a meta-address encodes. */
+interface StealthMetaAddress {
+  spendPubKey: Uint8Array;   // 32 bytes
+  viewPubKey: Uint8Array;    // 32 bytes
+}
+
+/** A complete key set. NOTE: this is NOT the SDK's StealthKeys — see the warning below. */
+interface StealthKeys {
+  spendPrivKey: Uint8Array;  // 32 bytes
+  viewPrivKey: Uint8Array;   // 32 bytes
+  metaAddress: StealthMetaAddress;
+}
+
+/** One on-chain announcement, as scanning consumes it. */
+interface Announcement {
+  ephemeralPubKey: Uint8Array;  // 32-byte R = r·G
+  viewTag: number;              // single byte, 0–255
+  stealthAddress: string;       // G... StrKey
+  txHash?: string;              // optional
+}
+
+/** A stealth address that scanning matched to you. */
+interface StealthAddress {
+  publicKey: Uint8Array;   // 32 bytes
+  address: string;         // G... StrKey
+}
+
+/** What the sender gets from deriveStealthAddress / computeStealthAddress. */
+interface StealthDerivation {
+  stealthPubKey: Uint8Array;    // 32-byte P
+  stealthAddress: string;       // G... StrKey
+  ephemeralPubKey: Uint8Array;  // 32-byte R — publish this
+  viewTag: number;              // publish this
+  ephemeralPrivKey: Uint8Array; // 32-byte r — sender's records only, never publish
+}
+
+/** deriveStealthAddressWithSecret additionally exposes the ECDH secret. */
+interface StealthDerivationWithSecret extends StealthDerivation {
+  sharedSecret: Uint8Array;     // 32-byte S — feeds encryptAmount/decryptAmount
+}</code></pre></div><aside class="callout warn"><p class="co-t">Two different StealthKeys</p>
+
+<p><code>@shade/crypto</code> and <code>@shade/sdk</code> both export a type named <code>StealthKeys</code>, and they are <strong>not</strong> the same shape:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th></th>
+<th><code>@shade/crypto</code></th>
+<th><code>@shade/sdk</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Encoding</td>
+<td><code>Uint8Array</code> (raw bytes)</td>
+<td><code>string</code> (hex)</td>
+</tr>
+<tr>
+<td>Fields</td>
+<td><code>spendPrivKey</code>, <code>viewPrivKey</code>, <code>metaAddress</code> (an object)</td>
+<td><code>metaAddress</code> (a <code>shade:stellar:</code> string), <code>spendPubKey</code>, <code>spendPrivKey</code>, <code>viewPubKey</code>, <code>viewPrivKey</code></td>
+</tr>
+</tbody></table></div>
+<p><code>StealthClient.keygen()</code> returns the <strong>SDK</strong> shape; <code>generateMetaAddress()</code> returns the <strong>crypto</strong> shape. Passing one where the other is expected will not type-check. Convert the crypto shape with the exported <strong><code>stealthKeysFromRaw(raw)</code></strong> helper, and import the crypto type under a distinct name via the re-export <strong><code>RawStealthKeys</code></strong>, so mixed-use code has one unambiguous import site.</p>
+</aside>
+
+
+<p>Errors: <code>InvalidPublicKey</code>, <code>InvalidScalar</code>, <code>InvalidMetaAddress</code>, <code>PointAtInfinity</code>.</p>
+<aside class="callout warn"><p class="co-t">Critical</p>
+
+<p><code>recoverStealthPrivateKey</code> returns a <strong>raw scalar</strong>, not a seed. Always sign with <code>signWithStealthKey</code>. See <a href="/docs/concepts/#the-math">Core Concepts</a>.</p>
+</aside>
+
+
+<hr>
+<h2 id="next-steps"><a class="anchor" href="#next-steps" aria-label="Link to section">Next steps</a></h2><ul>
+<li><a href="/docs/concepts/">Core Concepts</a> — the math behind these functions</li>
+<li><a href="/docs/delivery-methods/">Delivery Methods</a> — what <code>method</code> changes</li>
+<li><a href="/docs/relayer/">Relayer</a> — the service <code>RelayerClient</code> talks to</li>
+<li><a href="/docs/faq/">FAQ &amp; Troubleshooting</a> — error-by-error fixes</li>
+</ul>
+</article>
+    <nav class="pnrow" aria-label="Pagination"><a class="pn prev" href="/docs/cli/"><span class="pn-k">← Previous</span><span class="pn-t">CLI Reference</span></a><a class="pn next" href="/docs/relayer/"><span class="pn-k">Next →</span><span class="pn-t">Relayer</span></a></nav>
+  </main>
+</div>
+<footer class="foot">Shade — stealth addresses on Stellar · testnet · cryptography pending external audit</footer>
+</body>
+</html>

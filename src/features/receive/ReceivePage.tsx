@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dice5, Globe, KeyRound, RefreshCw, Sparkles, Trash2, Wallet } from 'lucide-react';
 import { NETWORK } from '@/config/network';
 import { assetLabel, formatAmount, truncate } from '@/lib/format';
@@ -41,6 +41,15 @@ export function ReceivePage() {
   const [asset, setAsset] = useState('');
   const [funding, setFunding] = useState(false);
   const [fundError, setFundError] = useState<string | null>(null);
+  // Transient "+N new" chip when a scan surfaces fresh payments.
+  const [newCount, setNewCount] = useState(0);
+  useEffect(() => {
+    if (scan.scanTick === 0 || scan.lastNewPayments.length === 0) return;
+    setNewCount(scan.lastNewPayments.length);
+    const t = window.setTimeout(() => setNewCount(0), 5000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scan.scanTick]);
 
   const assetTrimmed = asset.trim();
   const assetCode = !tokenMode ? 'XLM' : (assetTrimmed.split(':')[0] || 'Token').toUpperCase();
@@ -142,7 +151,10 @@ export function ReceivePage() {
               {claimableByAsset.length === 0 ? (
                 <div className="font-mono text-2xl font-semibold text-copper-300">—</div>
               ) : (
-                <div className="flex flex-col items-end gap-0.5 font-mono text-copper-300">
+                <div
+                  key={claimableByAsset.map((c) => `${c.label}:${c.amount}`).join('|')}
+                  className="animate-shade-rise flex flex-col items-end gap-0.5 font-mono text-copper-300"
+                >
                   {claimableByAsset.map(({ label, amount }) => (
                     <div key={label} className="text-2xl font-semibold leading-tight">
                       {formatAmount(amount)}{' '}
@@ -183,7 +195,8 @@ export function ReceivePage() {
           title="Meta-address"
           action={
             <span
-              className={`inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+              key={pub.publishState}
+              className={`animate-shade-rise inline-flex items-center gap-1.5 border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
                 pub.publishState === 'published'
                   ? 'border-signal-ok/40 bg-signal-ok/10 text-signal-ok'
                   : 'border-ink-600 text-ink-400'
@@ -279,7 +292,11 @@ export function ReceivePage() {
           </p>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
             <div className="shrink-0 self-center sm:self-start">
-              {payLink ? <QRCode value={payLink} size={148} /> : null}
+              {payLink ? (
+                <div key={payLink} className="animate-shade-fade">
+                  <QRCode value={payLink} size={148} />
+                </div>
+              ) : null}
             </div>
             <div className="min-w-0 flex-1 space-y-4">
               <div>
@@ -360,15 +377,22 @@ export function ReceivePage() {
           eyebrow="Incoming"
           title="Detected payments"
           action={
-            <Button
-              variant="ghost"
-              size="sm"
-              loading={scan.loading}
-              icon={<RefreshCw className="size-3.5" />}
-              onClick={() => void scan.scan()}
-            >
-              {settings.autoScanOnOpen ? 'Rescan' : 'Scan'}
-            </Button>
+            <div className="flex items-center gap-2">
+              {newCount > 0 && (
+                <span className="animate-shade-rise inline-flex items-center border border-signal-ok/40 bg-signal-ok/10 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-signal-ok">
+                  +{newCount} new
+                </span>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={scan.loading}
+                icon={<RefreshCw className="size-3.5" />}
+                onClick={() => void scan.scan()}
+              >
+                {settings.autoScanOnOpen ? 'Rescan' : 'Scan'}
+              </Button>
+            </div>
           }
           bodyClassName=""
         >

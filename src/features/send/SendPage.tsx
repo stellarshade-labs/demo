@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AtSign, BookmarkPlus, Check, KeyRound, Loader2, Send, ShieldQuestion, TriangleAlert, UserX, X } from 'lucide-react';
+import { AtSign, BookmarkPlus, Check, KeyRound, Send, ShieldQuestion, TriangleAlert, UserX, X } from 'lucide-react';
 import { stealthClient, DEFAULT_METHOD } from '@/lib/shade';
 import { toUserMessage } from '@/lib/errors';
 import { looksLikeMetaAddress, looksLikeStellarAddress, truncateMeta } from '@/lib/format';
@@ -40,6 +40,11 @@ export function SendPage() {
   const [asset, setAsset] = useState('');
   const [methodOverride, setMethodOverride] = useState<ReceiveMethod | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Narrates the sidebar's 4 steps while a send is in flight:
+  // 0 idle · 2 deriving · 3 delivering · 4 done (recipient's scan).
+  const [sendPhase, setSendPhase] = useState<0 | 2 | 3 | 4>(0);
+  // Inline label editor replacing window.prompt for "Save recipient".
+  const [savingLabel, setSavingLabel] = useState<string | null>(null);
   const [prefilled, setPrefilled] = useState(false);
   const [result, setResult] = useState<
     { status: 'success' | 'error'; message: string; txHash?: string } | null
@@ -83,13 +88,13 @@ export function SendPage() {
   };
 
   const handleSaveRecipient = () => {
-    const label = window.prompt('Save this recipient as…', '');
-    if (label === null) return;
+    if (savingLabel === null) return;
     addContact({
-      label: label.trim(),
+      label: savingLabel.trim(),
       address: trimmedRecipient,
       kind: contactKindFor(trimmedRecipient),
     });
+    setSavingLabel(null);
   };
 
   const parsedAmount = Number.parseFloat(amount);
@@ -136,6 +141,8 @@ export function SendPage() {
 
     setSubmitting(true);
     setResult(null);
+    setSendPhase(2);
+    const toDeliver = window.setTimeout(() => setSendPhase(3), 700);
 
     const txId = addTx({
       kind: 'send',
@@ -169,11 +176,16 @@ export function SendPage() {
         message: `Sent ${parsedAmount} ${assetCode} to a one-time stealth address via ${method}.`,
         txHash: receipt.txHash,
       });
-      resetForm();
+      window.clearTimeout(toDeliver);
+      setSendPhase(4);
+      // Let the success strip land before the fields empty out.
+      window.setTimeout(resetForm, 500);
     } catch (err) {
       const message = toUserMessage(err);
       updateTx(txId, { status: 'error', error: message });
       setResult({ status: 'error', message });
+      window.clearTimeout(toDeliver);
+      setSendPhase(0);
     } finally {
       setSubmitting(false);
     }
@@ -200,9 +212,12 @@ export function SendPage() {
             ]}
           />
 
-          <div className="space-y-5 p-5" data-tour="send-form">
+          <div
+            className={`space-y-5 p-5 transition-opacity duration-300 ${submitting ? 'opacity-70' : ''}`}
+            data-tour="send-form"
+          >
             {prefilled && (
-              <div className="flex items-center justify-between gap-3 border border-copper-500/40 bg-copper-500/5 px-3 py-2 text-[13px] text-copper-300">
+              <div className="animate-shade-rise flex items-center justify-between gap-3 border border-copper-500/40 bg-copper-500/5 px-3 py-2 text-[13px] text-copper-300">
                 <span>Prefilled from a payment link.</span>
                 <button
                   type="button"
@@ -224,7 +239,7 @@ export function SendPage() {
                   {canSaveRecipient && (
                     <button
                       type="button"
-                      onClick={handleSaveRecipient}
+                      onClick={() => setSavingLabel((s) => (s === null ? '' : null))}
                       className="flex h-8 items-center gap-1.5 border border-ink-700 bg-ink-850 px-2.5 text-[13px] text-ink-300 transition-colors hover:border-ink-600 hover:text-ink-100"
                     >
                       <BookmarkPlus className="size-3.5 text-copper-400" />
@@ -234,6 +249,28 @@ export function SendPage() {
                   <ContactPicker onPick={handlePickContact} />
                 </div>
               </div>
+
+              {savingLabel !== null && (
+                <div className="animate-shade-rise mb-2 flex items-center gap-2">
+                  <input
+                    autoFocus
+                    value={savingLabel}
+                    onChange={(e) => setSavingLabel(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveRecipient();
+                      if (e.key === 'Escape') setSavingLabel(null);
+                    }}
+                    placeholder="Label this contact"
+                    className="h-8 min-w-0 flex-1 border border-ink-600 bg-ink-900 px-2.5 text-[13px] text-ink-100 placeholder:text-ink-500 focus:border-copper-500 focus:outline-none"
+                  />
+                  <Button size="sm" variant="primary" onClick={handleSaveRecipient}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setSavingLabel(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
 
               {sendMode === 'public' ? (
                 <Field
@@ -272,10 +309,12 @@ export function SendPage() {
               )}
             </div>
 
-            <ResolutionStatus resolution={resolution} mode={sendMode} method={effectiveMethod} />
+            <div key={resolution.state} className="animate-shade-rise">
+              <ResolutionStatus resolution={resolution} mode={sendMode} method={effectiveMethod} />
+            </div>
 
             {resolution.state === 'resolved' && (
-              <div>
+              <div className="animate-shade-rise">
                 <div className="mb-2 flex items-center gap-1.5">
                   <span className="label-eyebrow">Delivery method</span>
                   <HelpTip label="Delivery method">
@@ -350,12 +389,23 @@ export function SendPage() {
             )}
 
             {result && (
-              <TxResult
-                status={result.status}
-                message={result.message}
-                txHash={result.txHash}
-                onDismiss={() => setResult(null)}
-              />
+              <div key={`${result.status}:${result.txHash ?? result.message}`} className="animate-shade-rise">
+                {result.status === 'success' && (
+                  <div className="sever-line" aria-hidden>
+                    <span />
+                    <span />
+                  </div>
+                )}
+                <TxResult
+                  status={result.status}
+                  message={result.message}
+                  txHash={result.txHash}
+                  onDismiss={() => {
+                    setResult(null);
+                    setSendPhase(0);
+                  }}
+                />
+              </div>
             )}
           </div>
         </Panel>
@@ -364,21 +414,21 @@ export function SendPage() {
       <aside className="space-y-5">
         <Panel eyebrow="How it works" title="This transfer">
           <ol className="space-y-4 text-[13px] leading-relaxed text-ink-300">
-            <Step n={1} label="Resolve">
+            <Step n={1} label="Resolve" state={sendPhase >= 2 ? 'done' : 'idle'}>
               {sendMode === 'public'
                 ? "Read the recipient's published meta-address from their account."
                 : 'Use the meta-address you were given directly.'}
             </Step>
-            <Step n={2} label="Derive">
+            <Step n={2} label="Derive" state={sendPhase === 2 ? 'active' : sendPhase > 2 ? 'done' : 'idle'}>
               Generate a random ephemeral key and combine it with the meta-address to compute a
               one-time stealth address only the recipient can spend from.
             </Step>
-            <Step n={3} label="Deliver">
+            <Step n={3} label="Deliver" state={sendPhase === 3 ? 'active' : sendPhase === 4 ? 'done' : 'idle'}>
               {effectiveMethod === 'account'
                 ? 'Fund a one-time classic Stellar account for the recipient.'
                 : 'Deposit the funds into the pool contract against that stealth address.'}
             </Step>
-            <Step n={4} label="Scan">
+            <Step n={4} label="Scan" state={sendPhase === 4 ? 'active' : 'idle'}>
               The recipient's view key detects the payment. Nobody else can tell it was for them.
             </Step>
           </ol>
@@ -411,17 +461,31 @@ function MethodPicker({
     { value: 'pool', label: 'Pool' },
     { value: 'account', label: 'Account' },
   ];
+  const ref = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>(`[data-opt="${value}"]`);
+    if (el) setThumb({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [value]);
   return (
-    <div className="inline-flex border border-ink-700">
+    <div ref={ref} className="relative inline-flex border border-ink-700">
+      {thumb && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 bg-copper-500 transition-all duration-300 ease-out motion-reduce:transition-none"
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
       {options.map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
+            data-opt={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`inline-flex items-center px-3 py-1.5 text-[13px] font-medium transition-colors ${
-              active ? 'bg-copper-500 text-onaccent' : 'text-ink-400 hover:text-ink-100'
+            className={`relative z-10 inline-flex items-center px-3 py-1.5 text-[13px] font-medium transition-colors duration-300 ${
+              active ? 'text-onaccent' : 'text-ink-400 hover:text-ink-100'
             }`}
           >
             {opt.label}
@@ -466,14 +530,35 @@ function AccountTokenWarning({
   );
 }
 
-function Step({ n, label, children }: { n: number; label: string; children: React.ReactNode }) {
+function Step({
+  n,
+  label,
+  state = 'idle',
+  children,
+}: {
+  n: number;
+  label: string;
+  /** Lights up while a send is in flight, turning the list into live progress. */
+  state?: 'idle' | 'active' | 'done';
+  children: React.ReactNode;
+}) {
   return (
     <li className="flex gap-3">
-      <span className="mt-px flex size-5 shrink-0 items-center justify-center border border-ink-600 font-mono text-[10px] text-ink-400">
-        {n}
+      <span
+        className={`mt-px flex size-5 shrink-0 items-center justify-center border font-mono text-[10px] transition-colors duration-300 ${
+          state === 'done'
+            ? 'border-signal-ok/50 bg-signal-ok/10 text-signal-ok'
+            : state === 'active'
+              ? 'animate-shade-pulse border-copper-500 bg-copper-500/10 text-copper-300'
+              : 'border-ink-600 text-ink-400'
+        }`}
+      >
+        {state === 'done' ? <Check className="size-3" /> : n}
       </span>
       <div>
-        <span className="font-medium text-ink-100">{label}. </span>
+        <span className={`font-medium transition-colors ${state === 'active' ? 'text-copper-300' : 'text-ink-100'}`}>
+          {label}.{' '}
+        </span>
         {children}
       </div>
     </li>
@@ -493,10 +578,11 @@ function ResolutionStatus({
 
   if (resolution.state === 'resolving') {
     return (
-      <Well className="flex items-center gap-2.5 text-[13px] text-ink-400">
-        <Loader2 className="size-3.5 animate-spin text-copper-400" />
-        Looking up published meta-address…
-      </Well>
+      <div className="animate-shade-fade-delayed">
+        <Well className="animate-shade-sheen relative flex items-center gap-2.5 overflow-hidden text-[13px] text-ink-400">
+          Looking up published meta-address…
+        </Well>
+      </div>
     );
   }
 

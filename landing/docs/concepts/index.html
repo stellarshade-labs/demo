@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Core Concepts — Shade docs</title>
+<meta name="description" content="How stealth addresses work on Stellar: DKSAP, view and spend keys, meta-addresses, view tags, and the ed25519 math behind them.">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%230b0c0e"/><g transform="translate(96 96) scale(16)"><rect x="2.5" y="2.5" width="10" height="10" fill="%23c8763c"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="%23c8763c" stroke-width="1.4" opacity="0.55"/></g></svg>'>
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="hdr">
+  <a class="lockup" href="/"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/></svg><span class="word">Shade</span></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk on" href="/docs/" aria-current="true">Docs</a>
+    <a class="lnk" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn" href="/app/">Launch app</a>
+  </nav>
+</header>
+<div class="wrap">
+  <nav class="sb" aria-label="Documentation"><div class="sb-group"><div class="sb-label">Learn</div><a class="sb-link" href="/docs/">Introduction</a><a class="sb-link on" href="/docs/concepts/" aria-current="page">Core Concepts</a><a class="sb-link" href="/docs/architecture/">Architecture</a><a class="sb-link" href="/docs/delivery-methods/">Delivery Methods</a></div><div class="sb-group"><div class="sb-label">Build</div><a class="sb-link" href="/docs/getting-started/">Getting Started</a><a class="sb-link" href="/docs/cli/">CLI Reference</a><a class="sb-link" href="/docs/sdk/">SDK Reference</a><a class="sb-link" href="/docs/relayer/">Relayer</a></div><div class="sb-group"><div class="sb-label">Trust</div><a class="sb-link" href="/docs/security/">Security</a><a class="sb-link" href="/docs/faq/">FAQ & Troubleshooting</a></div></nav>
+  <main class="doc">
+    <p class="crumb">Docs · Learn</p>
+    <h1>Core Concepts</h1>
+    <p class="lead">How stealth addresses work on Stellar: DKSAP, view and spend keys, meta-addresses, view tags, and the ed25519 math behind them.</p>
+    <article class="prose"><p>Shade implements <strong>DKSAP</strong> — the Dual-Key Stealth Address Protocol — on ed25519. This page defines every term used across the rest of the docs, in plain English first, with the exact math underneath.</p>
+<hr>
+<h2 id="two-keys-not-one"><a class="anchor" href="#two-keys-not-one" aria-label="Link to section">Two keys, not one</a></h2><p>Most wallets have one key that does everything. Shade splits your identity into <strong>two</strong> key pairs, which is what makes safe scanning possible:</p>
+<ul>
+<li><strong>View key</strong> — lets someone <em>find</em> payments sent to you. It can <strong>see</strong> but <strong>cannot spend</strong>. Safe to hand to a phone, a server, or a watch-only scanning service.</li>
+<li><strong>Spend key</strong> — required to actually <em>move</em> the money. This one never leaves you.</li>
+</ul>
+<p>Each key has a public and a private half:</p>
+<ul>
+<li>The <strong>public</strong> spend + view keys go <em>into the meta-address you give out</em>, so a sender can do the math to create your one-time address.</li>
+<li>The <strong>private</strong> spend + view keys stay <em>with you</em>: the private view key <strong>detects</strong> incoming payments, the private spend key <strong>spends</strong> them.</li>
+</ul>
+<aside class="callout warn"><p class="co-t">Security consequence</p>
+
+<p>Sharing your view key gives someone permanent visibility into all your incoming payments, past and future. There is <strong>no view key revocation</strong> — to stop a viewer you must generate new keys and publish a new meta-address. Old payments stay visible to the old viewer.</p>
+</aside>
+
+
+<h2 id="meta-address"><a class="anchor" href="#meta-address" aria-label="Link to section">Meta-address</a></h2><p>Your <strong>meta-address</strong> is the public halves of both keys, bundled and encoded:</p>
+<div class="codeblock"><span class="codelang">text</span><pre><code>shade:stellar:&lt;hex(spend_pk || view_pk || checksum)&gt;</code></pre></div><p>It is <strong>not a Stellar account</strong> — you cannot send funds to it directly. It is only an input a sender uses to <em>compute</em> a one-time address. Share it freely: profile, DM, business card.</p>
+<aside class="callout info"><p class="co-t">For developers</p>
+
+<p><code>encodeMetaAddress</code> / <code>decodeMetaAddress</code> in <code>@shade/crypto</code>. Payload is 64 bytes (32-byte spend pubkey ‖ 32-byte view pubkey) plus a 4-byte checksum = <code>SHA256(payload)[28..32]</code>, hex-encoded (136 hex chars). Decoding validates the prefix, strict hex, the checksum, and that both points are on-curve <strong>and torsion-free</strong> (rejecting small-order/identity points).</p>
+</aside>
+
+
+<h2 id="stealth-address"><a class="anchor" href="#stealth-address" aria-label="Link to section">Stealth address</a></h2><p>A <strong>stealth address</strong> is the one-time destination a sender derives from your meta-address. It&#39;s a normal Stellar <code>G...</code> address, but nobody can link it back to your meta-address without your view key.</p>
+<p>In the <code>pool</code> method the stealth address is never a real Stellar account — it&#39;s a <strong>key</strong> the contract uses to track your balance. In the <code>account</code> method it <em>is</em> a real, funded one-time account. See <a href="/docs/delivery-methods/">Delivery Methods</a>.</p>
+<h2 id="ephemeral-key-r-and-shared-secret-s"><a class="anchor" href="#ephemeral-key-r-and-shared-secret-s" aria-label="Link to section">Ephemeral key (R) and shared secret (S)</a></h2><p>For every payment, the sender picks a fresh random scalar <code>r</code> and publishes <code>R = r·G</code> (the <strong>ephemeral public key</strong>). Both sides can then compute the same <strong>shared secret</strong> without talking to each other:</p>
+<ul>
+<li>Sender: <code>S = r · K_view</code></li>
+<li>Receiver: <code>S = k_view · R</code></li>
+</ul>
+<p>This is <strong>ECDH</strong> (Elliptic Curve Diffie-Hellman) — the standard trick that lets two parties arrive at the same secret without ever transmitting it. <code>S</code> is what makes the stealth address derivable by you and nobody else.</p>
+<h2 id="view-tag"><a class="anchor" href="#view-tag" aria-label="Link to section">View tag</a></h2><p>The <strong>view tag</strong> is a single byte — <code>SHA256(S)[0]</code> — published alongside each announcement. It&#39;s a fast-path filter: if the tag doesn&#39;t match, the announcement definitely isn&#39;t yours and you can skip the rest of the check.</p>
+<p><strong>What it actually saves.</strong> Computing the tag still requires the shared secret, which means a full ECDH (<code>scalarMult</code>) per announcement — that cost is unavoidable and dominates scanning. The view tag only lets you skip the <em>extra</em> address-derivation step for the <del>255/256 of announcements that don&#39;t match. Measured end-to-end speedup: **</del>2×**.</p>
+<blockquote>
+<p>Only the <code>pool</code> method uses view tags. The <code>account</code> method matches on the derived destination address directly, which <em>is</em> the full verification.</p>
+</blockquote>
+<h2 id="the-math"><a class="anchor" href="#the-math" aria-label="Link to section">The math</a></h2><p><strong>Meta-address generation (receiver)</strong></p>
+<ol>
+<li>Generate two random scalars <code>k_spend</code>, <code>k_view</code> ∈ <code>[0, L-1]</code></li>
+<li>Compute <code>K_spend = k_spend · G</code>, <code>K_view = k_view · G</code></li>
+<li>Meta-address = <code>(K_spend, K_view)</code></li>
+</ol>
+<p><strong>Stealth address derivation (sender)</strong></p>
+<ol>
+<li>Pick random ephemeral scalar <code>r</code></li>
+<li><code>R = r · G</code></li>
+<li><code>S = r · K_view</code></li>
+<li><code>s = SHA256(S) mod L</code></li>
+<li><code>P_stealth = K_spend + s · G</code></li>
+<li><code>view_tag = SHA256(S)[0]</code></li>
+</ol>
+<p><strong>Scanning (receiver)</strong></p>
+<ol>
+<li>For each announcement: <code>S = k_view · R</code></li>
+<li>Filter: does <code>SHA256(S)[0]</code> equal the published view tag?</li>
+<li>On a match: <code>P = K_spend + SHA256(S)·G</code></li>
+<li>Verify <code>P</code> equals the announced stealth address</li>
+</ol>
+<p><strong>Private key recovery (receiver)</strong></p>
+<ol>
+<li><code>S = k_view · R</code></li>
+<li><code>s = SHA256(S) mod L</code></li>
+<li><code>p_stealth = k_spend + s mod L</code></li>
+</ol>
+<p><strong>Curve parameters</strong></p>
+<ul>
+<li>Curve: ed25519</li>
+<li>Order: <code>L = 2^252 + 27742317777372353535851937790883648493</code></li>
+</ul>
+<aside class="callout warn"><p class="co-t">For developers — a critical footgun</p>
+
+<p><code>recoverStealthPrivateKey</code> returns a <strong>raw ed25519 scalar</strong> (<code>k_spend + s mod L</code>), <em>not</em> an ed25519 seed. You must sign with <code>signWithStealthKey</code> from <code>@shade/crypto</code>. Never build a keypair from it via <code>Keypair.fromRawEd25519Seed()</code> or any seed-based API — those <strong>hash</strong> the input to derive a different signing scalar, producing a key that does not match the stealth public key. The contract would reject the signature and the funds would be unspendable.</p>
+</aside>
+
+
+<h2 id="why-the-ecdh-runs-client-side"><a class="anchor" href="#why-the-ecdh-runs-client-side" aria-label="Link to section">Why the ECDH runs client-side</a></h2><p>Stellar&#39;s smart-contract environment doesn&#39;t offer the specific curve operation the ECDH needs, so that math runs <strong>on your device</strong>, not on-chain. The contract never sees your keys — it only checks a signature.</p>
+<aside class="callout info"><p class="co-t">For developers</p>
+
+<p>Soroban&#39;s host exposes cryptographic functions such as <code>ed25519_verify</code>, <code>sha256</code>, <code>secp256r1_verify</code>, and curve operations for <strong>BLS12-381</strong> (CAP-0059) and <strong>BN254</strong> — but there is <strong>no Curve25519 scalar-multiplication host function</strong>. The DKSAP ECDH therefore cannot run on-chain and is performed client-side in <code>@shade/crypto</code>. The contract only ever <em>verifies</em> an ed25519 signature, which the host does support.</p>
+</aside>
+
+
+<h2 id="getting-your-keys-four-ways"><a class="anchor" href="#getting-your-keys-four-ways" aria-label="Link to section">Getting your keys — four ways</a></h2><ol>
+<li><strong>Random</strong> — fresh keys, back them up yourself.</li>
+<li><strong>BIP-39 mnemonic</strong> — 12 words you write down; recover on any device.</li>
+<li><strong>HD derivation</strong> — deterministic, via domain-separated SHA-256.</li>
+<li><strong>From your wallet&#39;s signature</strong> — sign one fixed message with your Stellar wallet and Shade derives your stealth keys from that signature. Same wallet + same scope → the same keys every time, so there is nothing extra to store or back up. This is the &quot;keyless&quot; path.</li>
+</ol>
+<aside class="callout info"><p class="co-t">For developers</p>
+
+<p><a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/crypto/src"><code>packages/crypto/src/{keys.ts, hd.ts, derive-signature.ts}</code></a>. Derivation uses domain-separated SHA-256 with the labels <code>shade-spend</code> and <code>shade-view</code> — <strong>not</strong> BIP-32/BIP-44 paths (those are defined over secp256k1). The signed message is built by <code>buildKeyDerivationMessage({ network, appId })</code> and carries the context string <code>stellar-shade-keys-v1</code> plus an explicit warning line. The wallet path uses the <strong>SEP-53</strong> (&quot;Sign and Verify Messages&quot;) prefix convention <code>&quot;Stellar Signed Message:\n&quot;</code> prepended to the message before signing.</p>
+</aside>
+
+
+<p><strong>Trade-off for method 4:</strong> your wallet effectively <em>is</em> your stealth-key backup. If the wallet is compromised, so are the stealth keys. That is the accepted deal for keyless recovery. Also: never sign the derivation message anywhere you don&#39;t trust — anyone who obtains that signature can derive (and thus control) your stealth keys.</p>
+<p><strong>Key scoping.</strong> The <code>appId</code> and <code>keyScope</code> are folded into the signed message, so different applications derive independent keys. They must <strong>match across every tool</strong> that derives from the same wallet, or you&#39;ll get different, non-interoperable keys. Defaults: <code>appId = &#39;default&#39;</code>, <code>keyScope = &#39;stealth&#39;</code> (SDK constants <code>DEFAULT_APP_ID</code> / <code>DEFAULT_KEY_SCOPE</code>; the CLI&#39;s <code>--app-id</code> / <code>--key-scope</code> default to the same values).</p>
+<h2 id="announcement"><a class="anchor" href="#announcement" aria-label="Link to section">Announcement</a></h2><p>An <strong>announcement</strong> is the on-chain record that lets you discover a payment. In the <code>pool</code> method it&#39;s a contract storage entry created <strong>atomically with the deposit</strong> — no deposit, no announcement, which makes announcement spam impossible. It carries:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ephemeral_pk</code></td>
+<td>The 32-byte <code>R</code></td>
+</tr>
+<tr>
+<td><code>view_tag</code></td>
+<td>The one-byte fast-path filter (stored as <code>u32</code>)</td>
+</tr>
+<tr>
+<td><code>stealth_pk</code></td>
+<td>The 32-byte derived stealth public key</td>
+</tr>
+<tr>
+<td><code>token</code></td>
+<td>The SAC token address that was deposited</td>
+</tr>
+<tr>
+<td><code>amount</code></td>
+<td>Amount deposited, in the token&#39;s smallest unit</td>
+</tr>
+<tr>
+<td><code>sequence</code></td>
+<td>Ledger sequence at deposit time</td>
+</tr>
+</tbody></table></div>
+<p>In the <code>account</code> method there is no contract announcement: the ephemeral key <code>R</code> rides in the transaction&#39;s <strong><code>MemoHash</code></strong>, and discovery means paging Horizon.</p>
+<hr>
+<h2 id="next-steps"><a class="anchor" href="#next-steps" aria-label="Link to section">Next steps</a></h2><ul>
+<li><a href="/docs/architecture/">Architecture</a> — how these concepts map onto components</li>
+<li><a href="/docs/delivery-methods/">Delivery Methods</a> — where <code>pool</code> and <code>account</code> differ</li>
+<li><a href="/docs/sdk/">SDK Reference</a> — the functions that implement all of this</li>
+<li><a href="/docs/security/">Security</a> — what the cryptography does and does not guarantee</li>
+</ul>
+</article>
+    <nav class="pnrow" aria-label="Pagination"><a class="pn prev" href="/docs/"><span class="pn-k">← Previous</span><span class="pn-t">Introduction</span></a><a class="pn next" href="/docs/architecture/"><span class="pn-k">Next →</span><span class="pn-t">Architecture</span></a></nav>
+  </main>
+</div>
+<footer class="foot">Shade — stealth addresses on Stellar · testnet · cryptography pending external audit</footer>
+</body>
+</html>

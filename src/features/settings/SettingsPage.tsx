@@ -1,4 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Link } from 'react-router-dom';
 import {
   Check,
@@ -266,12 +267,12 @@ export function SettingsPage() {
       <NotificationsSettings />
 
       {/* Backup & security -------------------------------------------------- */}
-      <Panel eyebrow="Security" title="Backup & identity">
+      <Panel eyebrow="Security · Vault" title="Backup & identity">
         <BackupControls identity={identity} />
       </Panel>
 
       {/* Auto-lock ---------------------------------------------------------- */}
-      <Panel eyebrow="Security" title="Locking & passkey">
+      <Panel eyebrow="Security · Access" title="Locking & passkey">
         <div className="space-y-5">
           <Row
             label="Auto-lock"
@@ -323,17 +324,31 @@ function AutoLockSegment({
 }) {
   // Own implementation (not the string-keyed <Segment>) since the values here
   // are a numeric union.
+  const ref = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>(`[data-seg="${value}"]`);
+    if (el) setThumb({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [value]);
   return (
-    <div className="inline-flex border border-ink-700">
+    <div ref={ref} className="relative inline-flex border border-ink-700">
+      {thumb && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 bg-copper-500 transition-all duration-300 ease-out motion-reduce:transition-none"
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
       {AUTO_LOCK_OPTIONS.map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
+            data-seg={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`inline-flex items-center px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
-              active ? 'bg-copper-500 text-onaccent' : 'text-ink-400 hover:text-ink-100'
+            className={`relative z-10 inline-flex items-center px-2.5 py-1.5 text-[13px] font-medium transition-colors duration-300 ${
+              active ? 'text-onaccent' : 'text-ink-400 hover:text-ink-100'
             }`}
           >
             {opt.label}
@@ -598,6 +613,7 @@ function ViewExportControls({ identity }: { identity: ReturnType<typeof useIdent
 function IdentitiesSettings({ identity }: { identity: ReturnType<typeof useIdentity> }) {
   const { identities, activeId, switchIdentity, removeIdentity, renameIdentity } = identity;
   const [adding, setAdding] = useState(false);
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -615,15 +631,7 @@ function IdentitiesSettings({ identity }: { identity: ReturnType<typeof useIdent
             canRemove={identities.length > 1}
             onSwitch={() => switchIdentity(item.id)}
             onRename={(label) => void renameIdentity(item.id, label)}
-            onRemove={() => {
-              if (
-                window.confirm(
-                  'Remove this identity from the vault? You can restore it from its backup. This cannot be undone.',
-                )
-              ) {
-                void removeIdentity(item.id);
-              }
-            }}
+            onRemove={() => setPendingRemove(item.id)}
           />
         ))}
       </div>
@@ -638,6 +646,18 @@ function IdentitiesSettings({ identity }: { identity: ReturnType<typeof useIdent
       </Button>
 
       <AddIdentityModal open={adding} onClose={() => setAdding(false)} />
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        title="Remove this identity?"
+        body="It will be removed from the vault in this browser. You can restore it from its backup. This cannot be undone."
+        confirmLabel="Remove identity"
+        onConfirm={() => {
+          if (pendingRemove) void removeIdentity(pendingRemove);
+          setPendingRemove(null);
+        }}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }
@@ -754,6 +774,7 @@ function IdentityRow({
 }
 
 function BackupControls({ identity }: { identity: ReturnType<typeof useIdentity> }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [revealed, setRevealed] = useState(false);
   const secret = identity.revealSecret();
 
@@ -808,19 +829,23 @@ function BackupControls({ identity }: { identity: ReturnType<typeof useIdentity>
           size="sm"
           variant="danger"
           icon={<Trash2 className="size-3.5" />}
-          onClick={() => {
-            if (
-              window.confirm(
-                'Delete this identity from this browser? You can restore it from your backup. This cannot be undone.',
-              )
-            ) {
-              identity.reset();
-            }
-          }}
+          onClick={() => setConfirmDelete(true)}
         >
           Delete identity
         </Button>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this identity?"
+        body="It will be removed from this browser entirely. You can restore it from your backup. This cannot be undone."
+        confirmLabel="Delete identity"
+        onConfirm={() => {
+          setConfirmDelete(false);
+          identity.reset();
+        }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }
@@ -894,17 +919,31 @@ function Segment<T extends string>({
   value: T;
   onChange: (value: T) => void;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current?.querySelector<HTMLElement>(`[data-seg="${value}"]`);
+    if (el) setThumb({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [value, options.length]);
   return (
-    <div className="inline-flex border border-ink-700">
+    <div ref={ref} className="relative inline-flex border border-ink-700">
+      {thumb && (
+        <span
+          aria-hidden
+          className="absolute inset-y-0 bg-copper-500 transition-all duration-300 ease-out motion-reduce:transition-none"
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
       {options.map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
+            data-seg={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium transition-colors ${
-              active ? 'bg-copper-500 text-onaccent' : 'text-ink-400 hover:text-ink-100'
+            className={`relative z-10 inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium transition-colors duration-300 ${
+              active ? 'text-onaccent' : 'text-ink-400 hover:text-ink-100'
             }`}
           >
             {opt.icon}

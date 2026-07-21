@@ -50,9 +50,9 @@ export function TxDetail({ tx, onClose }: { tx: TxRecord | null; onClose: () => 
         aria-label="Transaction detail"
         className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4"
       >
-        <div className="fixed inset-0 bg-ink-950/80 backdrop-blur-sm" onClick={onClose} />
+        <div className="animate-shade-fade fixed inset-0 bg-ink-950/80 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="relative my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col border border-ink-700 bg-ink-850 shadow-2xl shadow-black/60">
+        <div className="animate-shade-rise relative my-auto flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col border border-ink-700 bg-ink-850 shadow-2xl shadow-black/60">
           <header className="flex shrink-0 items-center justify-between border-b border-ink-700 px-5 py-4">
             <div>
               <div className="label-eyebrow">Transaction</div>

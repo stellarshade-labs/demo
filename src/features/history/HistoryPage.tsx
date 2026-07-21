@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ArrowUpRight, Download, Globe, History, Inbox, Search, Send, Trash2 } from 'lucide-react';
 import type { IndexerAnnouncement } from 'stellar-shade';
 import { indexerClient } from '@/lib/shade';
@@ -88,6 +89,7 @@ export function HistoryPage() {
   const [status, setStatus] = useState<TxStatus | 'all'>('all');
   const [query, setQuery] = useState('');
   const [selectedTx, setSelectedTx] = useState<TxRecord | null>(null);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // Apply the active filters. The text search matches the counterparty address,
   // the stealth address, and the tx hash — the fields a user would recognise.
@@ -137,7 +139,7 @@ export function HistoryPage() {
                 >
                   {hasFilter ? `Export ${filtered.length}` : 'Export CSV'}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={clearTransactions}>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmClear(true)}>
                   Clear
                 </Button>
               </div>
@@ -183,8 +185,8 @@ export function HistoryPage() {
                 />
               ) : (
                 <ul className="divide-y divide-ink-700">
-                  {filtered.map((tx) => (
-                    <TxRow key={tx.id} tx={tx} onOpen={setSelectedTx} />
+                  {filtered.map((tx, i) => (
+                    <TxRow key={tx.id} tx={tx} index={i} onOpen={setSelectedTx} />
                   ))}
                 </ul>
               )}
@@ -198,6 +200,18 @@ export function HistoryPage() {
       </aside>
 
       <TxDetail tx={selectedTx} onClose={() => setSelectedTx(null)} />
+
+      <ConfirmDialog
+        open={confirmClear}
+        title="Clear local history?"
+        body="Every locally recorded send, claim, and publication will be removed from this browser. On-chain data is unaffected."
+        confirmLabel="Clear history"
+        onConfirm={() => {
+          setConfirmClear(false);
+          clearTransactions();
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
     </div>
   );
 }
@@ -227,7 +241,15 @@ function FilterSelect({
   );
 }
 
-function TxRow({ tx, onOpen }: { tx: TxRecord; onOpen: (tx: TxRecord) => void }) {
+function TxRow({
+  tx,
+  index,
+  onOpen,
+}: {
+  tx: TxRecord;
+  index: number;
+  onOpen: (tx: TxRecord) => void;
+}) {
   const { label, Icon } = KIND_META[tx.kind];
   const state = tx.status === 'success' ? 'ok' : tx.status === 'pending' ? 'wait' : 'bad';
 
@@ -242,7 +264,8 @@ function TxRow({ tx, onOpen }: { tx: TxRecord; onOpen: (tx: TxRecord) => void })
           onOpen(tx);
         }
       }}
-      className="flex cursor-pointer items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800 focus:bg-ink-800 focus:outline-none sm:gap-4 sm:px-5"
+      style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}
+      className="animate-shade-rise flex cursor-pointer items-start gap-3 px-4 py-4 transition-colors hover:bg-ink-800 focus:bg-ink-800 focus:outline-none sm:gap-4 sm:px-5"
     >
       <Icon className="mt-0.5 size-4 shrink-0 text-ink-500" />
 
@@ -300,28 +323,56 @@ function TxRow({ tx, onOpen }: { tx: TxRecord; onOpen: (tx: TxRecord) => void })
 function AnnouncementFeed() {
   const [records, setRecords] = useState<IndexerAnnouncement[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Hashes that appeared in the latest poll — they get a one-time copper wash.
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let known: Set<string> | null = null;
+    const load = async (first: boolean) => {
       try {
         const health = await indexerClient.health();
         const page = await indexerClient.getAnnouncements(
           health.startCursor ?? undefined,
           25,
         );
-        if (!cancelled) setRecords(page.records.slice(-25).reverse());
+        if (cancelled) return;
+        const next = page.records.slice(-25).reverse();
+        if (known) {
+          const arrived = next.filter((r) => !known!.has(r.hash)).map((r) => r.hash);
+          if (arrived.length > 0) setFresh(new Set(arrived));
+        }
+        known = new Set(next.map((r) => r.hash));
+        setRecords(next);
+        setError(null);
       } catch {
-        if (!cancelled) setError('Indexer unreachable.');
+        if (!cancelled && first) setError('Indexer unreachable.');
       }
-    })();
+    };
+    void load(true);
+    // The crowd you hide in should look alive: keep the feed current.
+    const timer = window.setInterval(() => void load(false), 30_000);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 
   return (
-    <Panel eyebrow="Network" title="Recent announcements" bodyClassName="">
+    <Panel
+      eyebrow="Network"
+      title="Recent announcements"
+      bodyClassName=""
+      action={
+        !error &&
+        records !== null && (
+          <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider text-ink-400">
+            <span className="animate-shade-pulse size-1.5 rounded-full bg-signal-ok" />
+            live
+          </span>
+        )
+      }
+    >
       <p className="border-b border-ink-700 px-5 py-3 text-xs leading-relaxed text-ink-500">
         Every stealth deposit on this network. Indistinguishable from one another — that shared
         crowd is what makes any single payment private.
@@ -340,7 +391,12 @@ function AnnouncementFeed() {
       ) : (
         <ul className="max-h-[420px] divide-y divide-ink-700 overflow-y-auto">
           {records.map((record) => (
-            <li key={record.hash} className="flex items-center gap-3 px-4 py-2.5 sm:px-5">
+            <li
+              key={record.hash}
+              className={`flex items-center gap-3 px-4 py-2.5 sm:px-5 ${
+                fresh.has(record.hash) ? 'animate-shade-flash' : ''
+              }`}
+            >
               <StatusDot state={record.successful ? 'ok' : 'bad'} />
               <a
                 href={explorerTxUrl(record.hash)}

@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — Shade docs</title>
+<meta name="description" content="Shade's components: the Soroban pool contract, the crypto core, the SDK, the CLI and the relayer — plus the data flow for a full send, scan and claim cycle.">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="%230b0c0e"/><g transform="translate(96 96) scale(16)"><rect x="2.5" y="2.5" width="10" height="10" fill="%23c8763c"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="%23c8763c" stroke-width="1.4" opacity="0.55"/></g></svg>'>
+<link rel="stylesheet" href="/docs/docs.css">
+</head>
+<body>
+<header class="hdr">
+  <a class="lockup" href="/"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><rect x="2.5" y="2.5" width="10" height="10" fill="var(--copper-500)"/><rect x="7.5" y="7.5" width="10" height="10" fill="none" stroke="var(--copper-500)" stroke-width="1.4" opacity="0.55"/></svg><span class="word">Shade</span></a>
+  <nav class="nav" aria-label="Main">
+    <a class="lnk" href="/">Home</a>
+    <a class="lnk on" href="/docs/" aria-current="true">Docs</a>
+    <a class="lnk" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn" href="/app/">Launch app</a>
+  </nav>
+</header>
+<div class="wrap">
+  <nav class="sb" aria-label="Documentation"><div class="sb-group"><div class="sb-label">Learn</div><a class="sb-link" href="/docs/">Introduction</a><a class="sb-link" href="/docs/concepts/">Core Concepts</a><a class="sb-link on" href="/docs/architecture/" aria-current="page">Architecture</a><a class="sb-link" href="/docs/delivery-methods/">Delivery Methods</a></div><div class="sb-group"><div class="sb-label">Build</div><a class="sb-link" href="/docs/getting-started/">Getting Started</a><a class="sb-link" href="/docs/cli/">CLI Reference</a><a class="sb-link" href="/docs/sdk/">SDK Reference</a><a class="sb-link" href="/docs/relayer/">Relayer</a></div><div class="sb-group"><div class="sb-label">Trust</div><a class="sb-link" href="/docs/security/">Security</a><a class="sb-link" href="/docs/faq/">FAQ & Troubleshooting</a></div></nav>
+  <main class="doc">
+    <p class="crumb">Docs · Learn</p>
+    <h1>Architecture</h1>
+    <p class="lead">Shade's components: the Soroban pool contract, the crypto core, the SDK, the CLI and the relayer — plus the data flow for a full send, scan and claim cycle.</p>
+    <article class="prose"><p>Shade is a monorepo of four TypeScript packages plus one Soroban contract. This page maps each component to its job, then walks the data flow for a full send → scan → claim cycle.</p>
+<hr>
+<h2 id="components"><a class="anchor" href="#components" aria-label="Link to section">Components</a></h2><div class="codeblock"><span class="codelang">text</span><pre><code>                        +-----------------------+
+                        |    packages/crypto    |
+                        |      (SDK core)       |
+                        |                       |
+                        | - DKSAP key derivation|
+                        | - Stealth address gen |
+                        | - ECDH shared secrets |
+                        | - View tag scanning   |
+                        | - HD keys (BIP-39)    |
+                        | - Pure TS, no Stellar |
+                        +-----------+-----------+
+                                    |
+                  +-----------------+-----------------+
+                  |                                   |
+          +-------v--------+                 +--------v---------+
+          | packages/sdk   |                 | packages/relayer |
+          | (StealthClient)|                 | (fee-bump /      |
+          |                |                 |  sponsor /       |
+          | pool | account |                 |  credit)         |
+          | adapters       |                 |                  |
+          +-------+--------+                 +--------+---------+
+                  |                                   |
+          +-------v--------+                          |
+          | packages/cli   |                          |
+          | (shade)        |                          |
+          +-------+--------+                          |
+                  |                                   |
+                  +-----------------+-----------------+
+                                    |
+                  +-----------------v-----------------+
+                  |      contracts/registry           |
+                  |      (Soroban pool contract)      |
+                  |                                   |
+                  | deposit()  — deposit + announce   |
+                  | withdraw() — ed25519 sig verified |
+                  | + 5 read-only getters             |
+                  +-----------------------------------+</code></pre></div><p><strong>Reading the diagram:</strong> <code>crypto</code> is the dependency-free core everything builds on. The <code>sdk</code> wraps all network I/O behind delivery-method adapters. The <code>cli</code> is a reference consumer. The <code>relayer</code> is a standalone service that never imports <code>crypto</code> — it only handles transaction envelopes and credit accounting. Everything on the <code>pool</code> path terminates at the Soroban contract.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Role</th>
+<th>Key dependency note</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>@shade/crypto</code></td>
+<td>DKSAP math: keys, derivation, scanning, recovery, HD/mnemonic, raw-scalar signing</td>
+<td><strong>Zero</strong> <code>@stellar/stellar-sdk</code> dependency. Uses <code>@noble/curves</code>, <code>@noble/hashes</code>, <code>@scure/bip39</code>. Implements StrKey (<code>G...</code>) encoding itself, per <strong>SEP-23</strong>.</td>
+</tr>
+<tr>
+<td><code>@shade/sdk</code></td>
+<td><code>StealthClient</code> — hides all Horizon/Soroban I/O behind <code>send</code>/<code>scan</code>/<code>claim</code>. Delivery adapters, typed errors, encrypted sessions, relayer client.</td>
+<td>Depends on <code>@shade/crypto</code> + <code>@stellar/stellar-sdk</code>.</td>
+</tr>
+<tr>
+<td><code>@shade/cli</code></td>
+<td>The <code>shade</code> reference command-line tool.</td>
+<td>Delegates the <code>account</code> method to the SDK; builds <code>pool</code> invocations inline.</td>
+</tr>
+<tr>
+<td><code>@shade/relayer</code></td>
+<td>Express service: fee-bump, sponsored claims, credit ledger.</td>
+<td>Standalone — no <code>@shade/crypto</code> dependency.</td>
+</tr>
+<tr>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/contracts/registry"><code>contracts/registry</code></a></td>
+<td>The Soroban pool contract (<code>StealthPoolContract</code>), Rust / <code>soroban-sdk</code>.</td>
+<td>Single contract; calls SAC tokens for transfers.</td>
+</tr>
+</tbody></table></div>
+<h2 id="the-pool-contract"><a class="anchor" href="#the-pool-contract" aria-label="Link to section">The pool contract</a></h2><h3 id="public-functions"><a class="anchor" href="#public-functions" aria-label="Link to section">Public functions</a></h3><p>The contract exposes seven functions — two that write, five read-only:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Function</th>
+<th>Kind</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>deposit(sender, token_addr, amount, stealth_pk, ephemeral_pk, view_tag)</code></td>
+<td>write</td>
+<td>Atomic deposit + announcement. <code>sender.require_auth()</code>.</td>
+</tr>
+<tr>
+<td><code>withdraw(stealth_pk, token_addr, amount, destination, nonce, signature)</code></td>
+<td>write</td>
+<td>Ed25519-verified withdrawal (no <code>require_auth</code>).</td>
+</tr>
+<tr>
+<td><code>get_balance(stealth_pk, token_addr) -&gt; i128</code></td>
+<td>read</td>
+<td>Pool balance for a (key, token) pair. <strong>Extends the entry&#39;s TTL.</strong></td>
+</tr>
+<tr>
+<td><code>get_nonce(stealth_pk) -&gt; u64</code></td>
+<td>read</td>
+<td>Current replay-protection nonce. <strong>Extends the entry&#39;s TTL.</strong></td>
+</tr>
+<tr>
+<td><code>get_announcements(start, limit) -&gt; Vec&lt;AnnouncementEntry&gt;</code></td>
+<td>read</td>
+<td>Paginated announcement window. Deserializes only <code>start..min(start+limit, count)</code>. <code>limit</code> uses <code>saturating_add</code>, so <code>u64::MAX</code> clamps instead of panicking.</td>
+</tr>
+<tr>
+<td><code>get_announcements_by_tag(view_tag, start, limit) -&gt; Vec&lt;AnnouncementEntry&gt;</code></td>
+<td>read</td>
+<td>Paginated window filtered to one view tag. Same bounds as <code>get_announcements</code>: scans only <code>start..min(start+limit, count)</code>, with the <code>saturating_add</code> clamp.</td>
+</tr>
+<tr>
+<td><code>get_announcement_count() -&gt; u64</code></td>
+<td>read</td>
+<td>Total announcements — a cheap freshness check.</td>
+</tr>
+</tbody></table></div>
+<aside class="callout info"><p class="co-t">get_announcements_by_tag is a convenience, not the scanning path</p>
+
+<p>It is paginated like <code>get_announcements</code> — each call reads only the <code>start..start+limit</code> window and returns the matches within it, so callers page it the same way. The SDK deliberately does <strong>not</strong> use it: it pages <code>get_announcements</code> and filters by view tag <strong>client-side</strong>, which avoids leaking which tag you are interested in to the RPC node you query. Reach for it only for ad-hoc inspection.</p>
+</aside>
+
+
+<h3 id="storage-layout"><a class="anchor" href="#storage-layout" aria-label="Link to section">Storage layout</a></h3><p>Storage is keyed, never a growing list — so a deposit&#39;s cost does <strong>not</strong> scale with history:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Value</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Balance(stealth_pk, token)</code></td>
+<td><code>i128</code></td>
+<td>Per-(key, token) balance. Not a mixer — each stealth key has its own isolated balance.</td>
+</tr>
+<tr>
+<td><code>Nonce(stealth_pk)</code></td>
+<td><code>u64</code></td>
+<td>Replay protection; must strictly increase.</td>
+</tr>
+<tr>
+<td><code>Announcement(index)</code></td>
+<td><code>AnnouncementEntry</code></td>
+<td>One announcement per own keyed entry — <strong>O(1) append</strong>, no history rewrite.</td>
+</tr>
+<tr>
+<td><code>AnnouncementCount</code></td>
+<td><code>u64</code></td>
+<td>Total announcements; also the next index.</td>
+</tr>
+</tbody></table></div>
+<p>All entries are <strong>persistent</strong> storage. TTLs are extended on write and, notably, <strong>on read</strong>: <code>get_balance</code> and <code>get_nonce</code> bump a live entry&#39;s TTL back up to the ceiling. That means a passively-scanning recipient keeps their own balance alive without ever writing.</p>
+<div class="codeblock"><span class="codelang">rust</span><pre><code>const TTL_THRESHOLD: u32 = 518_400;    // ~30 days
+const TTL_EXTEND_TO:  u32 = 6_312_000; // ~365 days</code></pre></div><aside class="callout info"><p class="co-t">State archival</p>
+
+<p>Soroban archives persistent entries whose TTL lapses. If a <code>Balance</code>/<code>Nonce</code> entry does archive, a client must submit a <code>RestoreFootprintOp</code> before the next read/write — the SDK does this automatically (see below).</p>
+</aside>
+
+
+<h3 id="authorization-model"><a class="anchor" href="#authorization-model" aria-label="Link to section">Authorization model</a></h3><p>Two different mechanisms, deliberately:</p>
+<ul>
+<li><strong><code>deposit</code></strong> uses <code>sender.require_auth()</code> — the sender is a normal Stellar account, so standard Soroban auth applies.</li>
+<li><strong><code>withdraw</code></strong> uses <strong><code>env.crypto().ed25519_verify</code></strong> on an explicit message — <em>not</em> <code>require_auth</code>. A stealth key is not a Stellar account and has no auth entry, so the contract verifies a raw signature instead. This is what lets <strong>anyone</strong> (a relayer, a friend, a fee-payer) submit the transaction on the recipient&#39;s behalf without being the recipient.</li>
+</ul>
+<h3 id="the-withdraw-message"><a class="anchor" href="#the-withdraw-message" aria-label="Link to section">The withdraw message</a></h3><p>The signed message must be byte-identical between Rust and TypeScript:</p>
+<div class="codeblock"><span class="codelang">text</span><pre><code>SHA256( stealth_pk(32)
+      ‖ token_strkey_ascii(56)
+      ‖ amount_be_i128(16)
+      ‖ dest_strkey_ascii(56)
+      ‖ nonce_be_u64(8)
+      ‖ contract_strkey_ascii(56)
+      ‖ network_id(32) )</code></pre></div><p>The trailing <strong>contract address</strong> and <strong>network id</strong> (= <code>SHA-256(network passphrase)</code>, matching the on-chain <code>env.ledger().network_id()</code>) bind the signature to a single deployment on a single network, preventing cross-deployment and cross-network replay.</p>
+<aside class="callout info"><p class="co-t">For developers</p>
+
+<p>Rust: <code>build_withdraw_message</code> in <a href="https://github.com/stellarshade-labs/Shade/tree/main/contracts/registry/src/lib.rs"><code>contracts/registry/src/lib.rs</code></a>. TypeScript: <code>buildWithdrawMessage</code> in <a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/sdk/src/soroban.ts"><code>packages/sdk/src/soroban.ts</code></a> (with 56-byte StrKey length assertions). A contract test (<code>test_withdraw_message_binds_contract_and_network</code>) proves a signature valid on deployment A is rejected on deployment B.</p>
+</aside>
+
+
+<h3 id="reentrancy-safety"><a class="anchor" href="#reentrancy-safety" aria-label="Link to section">Reentrancy safety</a></h3><p><code>withdraw</code> follows <strong>checks-effects-interactions</strong>: the nonce and balance are committed to storage <strong>before</strong> the external SAC <code>transfer</code> call, so a malicious token contract cannot re-enter and replay the withdrawal.</p>
+<h3 id="stellar-asset-contract-sac"><a class="anchor" href="#stellar-asset-contract-sac" aria-label="Link to section">Stellar Asset Contract (SAC)</a></h3><p>The contract moves value through the standard token interface (<code>soroban_sdk::token::Client</code>), so it works with any <strong>Stellar Asset Contract</strong> — the contract that exposes a classic Stellar asset (native XLM, USDC, any issued asset) to Soroban. Cross-contract calls are limited to these SAC <code>transfer</code> calls:</p>
+<ul>
+<li><code>deposit</code> → <code>transfer(sender → contract)</code></li>
+<li><code>withdraw</code> → <code>transfer(contract → destination)</code></li>
+</ul>
+<p>The SDK resolves an asset string to its SAC address with <code>resolveTokenAddress</code>, and <code>labelForToken</code> reverses the deterministic native-XLM SAC id back to the label <code>XLM</code> for display.</p>
+<h2 id="data-flow-pool-send-scan-claim"><a class="anchor" href="#data-flow-pool-send-scan-claim" aria-label="Link to section">Data flow: pool send → scan → claim</a></h2><p><strong>1. Send</strong> (<code>PoolAdapter.send</code>)</p>
+<ol>
+<li>Decode the meta-address → <code>(K_spend, K_view)</code></li>
+<li>Draw a random 32-byte ephemeral <code>r</code>; derive <code>P</code>, <code>R</code>, <code>view_tag</code></li>
+<li>Resolve the asset to a SAC address; convert the amount to stroops</li>
+<li>Build the <code>deposit(...)</code> invocation, <code>prepareTransaction</code>, sign (local secret or external signer), submit</li>
+<li>Interpret the RPC result: only <code>SUCCESS</code> / <code>PENDING</code> / <code>DUPLICATE</code> count as landed; anything else throws (a <code>TRY_AGAIN_LATER</code> becomes a retryable error rather than a false success)</li>
+</ol>
+<p><strong>2. Scan</strong> (<code>PoolAdapter.scan</code>)</p>
+<ol>
+<li>Read <code>get_announcement_count()</code> — a cheap freshness check that lets a caller skip a full scan</li>
+<li>Page <code>get_announcements(start, limit)</code> from the cursor (200 per page)</li>
+<li>Run the two-pass scan: ECDH + view-tag filter, then full derivation on tag matches</li>
+<li>For each match, read <code>get_balance</code> and drop zero balances</li>
+<li>Return payments plus an advanced cursor (the announcement index)</li>
+</ol>
+<p><strong>3. Claim / withdraw</strong> (<code>PoolAdapter.withdraw</code>)</p>
+<ol>
+<li>Find the announcement matching the stealth address</li>
+<li><code>recoverStealthPrivateKey</code> → the raw stealth scalar</li>
+<li>Read <code>get_balance</code> and <code>get_nonce</code>; the new nonce is <code>current + 1</code></li>
+<li>Build the withdraw message; sign it with <code>signWithStealthKey</code></li>
+<li>Build the <code>withdraw(...)</code> invocation sourced by the <strong>fee payer</strong></li>
+<li><strong>Restore-aware prepare</strong> (below)</li>
+<li>Sign the fee-payer leg; submit directly to RPC, or POST to the relayer&#39;s <code>/relay</code> for a fee-bump</li>
+</ol>
+<h3 id="restore-aware-preparation"><a class="anchor" href="#restore-aware-preparation" aria-label="Link to section">Restore-aware preparation</a></h3><p><code>server.prepareTransaction</code> only throws on a simulation <em>error</em> — it ignores <code>sim.restorePreamble</code>. If the recipient&#39;s <code>Balance</code>/<code>Nonce</code> entry has archived, a bare prepare would assemble the withdraw over an archived footprint: it submits, fails on-chain, and <code>get_balance</code> still shows the funds — an opaque brick.</p>
+<p><code>prepareWithRestore</code> (<a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/sdk/src/methods/restore.ts"><code>packages/sdk/src/methods/restore.ts</code></a>) fixes this in three steps. On <code>isSimulationRestore</code> it builds and submits a <code>RestoreFootprintOp</code> from the preamble, then waits for it to land. Because that restore consumes the fee payer&#39;s next sequence number, it then <strong>re-fetches the account and rebuilds the invocation on the fresh sequence</strong>. Only then does it re-simulate. Without the rebuild, the withdraw would collide at an already-consumed sequence (<code>txBAD_SEQ</code>).</p>
+<h2 id="data-flow-account-method"><a class="anchor" href="#data-flow-account-method" aria-label="Link to section">Data flow: account method</a></h2><p>The <code>account</code> method never touches the contract:</p>
+<ul>
+<li><strong>Send</strong> — a classic transaction with the ephemeral <code>R</code> in a 32-byte <code>MemoHash</code>. Native XLM lands via <code>CreateAccount</code>/<code>Payment</code>; a token lands as a <code>CreateClaimableBalance</code> naming the stealth address as claimant.</li>
+<li><strong>Scan</strong> — page Horizon transactions; for each hash-memo tx, decode the memo as a candidate <code>R</code>, derive the stealth address, and look for an operation whose destination matches. The destination match <strong>is</strong> the verification — no view tag needed.</li>
+<li><strong>Claim</strong> — sign with the recovered stealth key: <code>AccountMerge</code> (full sweep) or <code>Payment</code> (partial) for XLM; <code>ChangeTrust</code> + <code>ClaimClaimableBalance</code> (+ optional exit) for a token, or a relayer-sponsored claim.</li>
+</ul>
+<aside class="callout info"><p class="co-t">Ecosystem note</p>
+
+<p>The <code>account</code> method depends on Horizon paging. Stellar&#39;s official docs now describe <strong>Horizon as deprecated in favour of Stellar RPC</strong>, and Stellar RPC is explicitly <em>not</em> a historical indexer. A dedicated indexer for account-method scans is on the project&#39;s roadmap.</p>
+</aside>
+
+
+<h2 id="where-the-critical-logic-lives"><a class="anchor" href="#where-the-critical-logic-lives" aria-label="Link to section">Where the critical logic lives</a></h2><div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Concern</th>
+<th>Location</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Signature/message binding (anti-replay)</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/contracts/registry/src/lib.rs"><code>contracts/registry/src/lib.rs</code></a> + <a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/sdk/src/soroban.ts"><code>packages/sdk/src/soroban.ts</code></a></td>
+</tr>
+<tr>
+<td>Reentrancy ordering</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/contracts/registry/src/lib.rs"><code>contracts/registry/src/lib.rs</code></a> (<code>withdraw</code>)</td>
+</tr>
+<tr>
+<td>State-archival restore</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/sdk/src/methods/restore.ts"><code>packages/sdk/src/methods/restore.ts</code></a></td>
+</tr>
+<tr>
+<td>Malicious-relayer defence</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/sdk/src/methods/account.ts"><code>packages/sdk/src/methods/account.ts</code></a> (<code>verifySponsoredClaimXdr</code>)</td>
+</tr>
+<tr>
+<td>Small-subgroup / torsion rejection</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/crypto/src/ed25519.ts"><code>packages/crypto/src/ed25519.ts</code></a> (<code>validatePoint</code>)</td>
+</tr>
+<tr>
+<td>Credit accounting, idempotency</td>
+<td><a href="https://github.com/stellarshade-labs/Shade/tree/main/packages/relayer/src/ledger.ts"><code>packages/relayer/src/ledger.ts</code></a></td>
+</tr>
+</tbody></table></div>
+<hr>
+<h2 id="next-steps"><a class="anchor" href="#next-steps" aria-label="Link to section">Next steps</a></h2><ul>
+<li><a href="/docs/delivery-methods/">Delivery Methods</a> — choosing between <code>pool</code> and <code>account</code></li>
+<li><a href="/docs/sdk/">SDK Reference</a> — the API over this architecture</li>
+<li><a href="/docs/relayer/">Relayer</a> — the service in the diagram&#39;s right-hand branch</li>
+<li><a href="/docs/security/">Security</a> — the assumptions this architecture rests on</li>
+</ul>
+</article>
+    <nav class="pnrow" aria-label="Pagination"><a class="pn prev" href="/docs/concepts/"><span class="pn-k">← Previous</span><span class="pn-t">Core Concepts</span></a><a class="pn next" href="/docs/delivery-methods/"><span class="pn-k">Next →</span><span class="pn-t">Delivery Methods</span></a></nav>
+  </main>
+</div>
+<footer class="foot">Shade — stealth addresses on Stellar · testnet · cryptography pending external audit</footer>
+</body>
+</html>

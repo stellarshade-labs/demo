@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Eye, EyeOff, Fingerprint, Lock } from 'lucide-react';
+import { Eye, EyeOff, Fingerprint, Lock, LockOpen } from 'lucide-react';
 import { useIdentity } from '@/identity/IdentityProvider';
 import { useIdentityStore } from '@/identity/identityStore';
 import { isWebAuthnAvailable } from '@/lib/webauthn';
@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { Notice } from '@/components/ui/Status';
 import { ShadeMark } from '@/components/layout/ShadeMark';
+import { BackdropSquares } from '@/components/ui/BackdropSquares';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 
 /**
@@ -22,6 +24,10 @@ export function UnlockScreen() {
   const [passphrase, setPassphrase] = useState('');
   const [show, setShow] = useState(false);
   const [webAuthnReady, setWebAuthnReady] = useState(false);
+  // True while the passphrase path is deriving keys — drives the lock's
+  // opening beat so the wait reads as the vault turning, not a dead spinner.
+  const [opening, setOpening] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   // Capability detection is synchronous here (API presence). PRF itself is only
   // confirmed during the ceremony, so a failed passkey unlock just surfaces an
@@ -34,18 +40,25 @@ export function UnlockScreen() {
 
   return (
     <div className="fixed inset-0 z-40 overflow-y-auto bg-ink-950">
+      <BackdropSquares />
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
 
-      <div className="mx-auto flex min-h-full w-full max-w-sm flex-col justify-center px-5 py-16">
+      <div className="relative mx-auto flex min-h-full w-full max-w-sm flex-col justify-center px-5 py-16">
         <div className="mb-8 flex items-center gap-2.5">
           <ShadeMark className="size-6 text-copper-500" />
           <span className="text-lg font-bold tracking-tight text-ink-50">Shade</span>
         </div>
 
-        <div className="mb-4 flex size-10 items-center justify-center border border-ink-700 bg-ink-850 text-copper-400">
-          <Lock className="size-4.5" />
+        <div
+          className={`mb-4 flex size-10 items-center justify-center border transition-colors duration-300 ${
+            opening
+              ? 'animate-shade-pulse border-copper-500 bg-copper-500/10 text-copper-300'
+              : 'border-ink-700 bg-ink-850 text-copper-400'
+          }`}
+        >
+          {opening ? <LockOpen className="size-4.5" /> : <Lock className="size-4.5" />}
         </div>
         <h1 className="text-xl font-bold tracking-tight text-ink-50">Welcome back</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
@@ -58,11 +71,15 @@ export function UnlockScreen() {
             <Button
               variant="primary"
               className="w-full"
-              loading={unlocking}
-              icon={<Fingerprint className="size-4" />}
+              disabled={unlocking}
+              icon={
+                <Fingerprint
+                  className={`size-4 ${unlocking && !opening ? 'animate-shade-pulse' : ''}`}
+                />
+              }
               onClick={() => void unlockWithPasskey()}
             >
-              Unlock with passkey
+              {unlocking && !opening ? 'Touch your authenticator…' : 'Unlock with passkey'}
             </Button>
             <div className="my-5 flex items-center gap-3 text-[11px] uppercase tracking-wider text-ink-600">
               <span className="h-px flex-1 bg-ink-700" />
@@ -76,7 +93,8 @@ export function UnlockScreen() {
           className={`space-y-4 ${passkeyEnabled ? '' : 'mt-6'}`}
           onSubmit={(e) => {
             e.preventDefault();
-            void unlock(passphrase);
+            setOpening(true);
+            void unlock(passphrase).finally(() => setOpening(false));
           }}
         >
           <Field
@@ -116,19 +134,22 @@ export function UnlockScreen() {
           </p>
           <button
             type="button"
-            onClick={() => {
-              if (
-                window.confirm(
-                  'Reset this browser? Your encrypted identity will be removed here. You can restore it from your backup. This cannot be undone.',
-                )
-              ) {
-                reset();
-              }
-            }}
+            onClick={() => setConfirmReset(true)}
             className="mt-2 text-xs text-signal-bad underline decoration-signal-bad/40 underline-offset-2 hover:decoration-signal-bad"
           >
             Reset & start over
           </button>
+          <ConfirmDialog
+            open={confirmReset}
+            title="Reset this browser?"
+            body="Your encrypted identity will be removed from this browser. You can restore it from your backup. This cannot be undone."
+            confirmLabel="Reset browser"
+            onConfirm={() => {
+              setConfirmReset(false);
+              reset();
+            }}
+            onCancel={() => setConfirmReset(false)}
+          />
         </div>
       </div>
     </div>

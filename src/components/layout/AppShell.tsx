@@ -31,6 +31,7 @@ import { Portal } from '@/components/ui/Portal';
 import { StatusDot } from '@/components/ui/Status';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 import { ShadeMark } from './ShadeMark';
+import { useScanContext } from '@/stealth/ScanProvider';
 
 const NAV = [
   { to: '/send', label: 'Send', Icon: Send, tour: 'nav-send' },
@@ -128,7 +129,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         )}
 
-        <main className="mx-auto w-full max-w-[1180px] flex-1 px-4 py-6 sm:px-6 sm:py-8">{children}</main>
+        <main
+          key={location.pathname}
+          className="animate-shade-rise mx-auto w-full max-w-[1180px] flex-1 px-4 py-6 sm:px-6 sm:py-8"
+        >
+          {children}
+        </main>
 
         <footer className="border-t border-ink-700 px-4 py-4 text-xs text-ink-600 sm:px-6">
           Demo build against Shade on {NETWORK.label}. The protocol's cryptography is pending
@@ -177,10 +183,15 @@ function RailContent({
   onNavigate?: () => void;
   onClose?: () => void;
 }) {
+  // The mark breathes while the scan engine is combing ledgers — the app's
+  // quiet signal that the view key is watching.
+  const scan = useScanContext();
   return (
     <>
       <div className="flex h-14 items-center gap-2.5 border-b border-ink-700 px-4">
-        <ShadeMark className="size-5 shrink-0 text-copper-500" />
+        <ShadeMark
+          className={`size-5 shrink-0 text-copper-500 ${scan.loading ? 'animate-shade-pulse' : ''}`}
+        />
         <span className="text-[15px] font-bold tracking-tight text-ink-50">Shade</span>
         {onClose && (
           <button
@@ -293,7 +304,7 @@ function IdentitySwitcher() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-40 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-900 py-1 shadow-lg"
+          className="animate-shade-rise absolute right-0 top-full z-40 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-900 py-1 shadow-lg"
         >
           <div className="label-eyebrow px-3 py-1.5">Identities</div>
           <div className="max-h-64 overflow-y-auto">
