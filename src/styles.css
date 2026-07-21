@@ -172,3 +172,23 @@ html[data-theme='light'] {
   background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.04), transparent);
   animation: shade-sheen 1.4s infinite;
 }
+
+/* Small rise-in for demo results and observer rows appearing in place. */
+@keyframes shade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-shade-rise {
+  animation: shade-rise 0.35s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-shade-rise {
+    animation: none;
+  }
+}

@@ -567,8 +567,8 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   <section class="sect" id="wallets">
     <span class="eyebrow rev">Wallets</span>
     <h2 class="display rev">Bring your own signer.</h2>
-    <p class="lead rev">Wallets plug in through one connector interface. Receiving needs raw message
-      signing to derive stealth keys — wallets without it are labelled up front, not failed later.</p>
+    <p class="lead rev">Wallets plug in through one connector interface. Stealth keys derive from one
+      wallet signature — supported in the extension and over WalletConnect on mobile.</p>
     <div class="wtable rev" role="table" aria-label="Wallet support">
       <div class="wrow" role="row">
         <span class="h" role="columnheader">Wallet</span>
@@ -580,23 +580,17 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
         <span class="wname" role="cell"><i></i>Freighter</span>
         <span class="wmark y" role="cell">YES</span>
         <span class="wmark y" role="cell">YES</span>
-        <span class="wnote" role="cell">Full support — recommended</span>
+        <span class="wnote" role="cell">Browser extension — full support</span>
       </div>
       <div class="wrow" role="row">
-        <span class="wname" role="cell"><i></i>xBull</span>
+        <span class="wname" role="cell"><i></i>Freighter mobile</span>
         <span class="wmark y" role="cell">YES</span>
-        <span class="wmark n" role="cell">—</span>
-        <span class="wnote" role="cell">No raw message signing for key derivation</span>
-      </div>
-      <div class="wrow" role="row">
-        <span class="wname" role="cell"><i></i>Albedo</span>
         <span class="wmark y" role="cell">YES</span>
-        <span class="wmark n" role="cell">—</span>
-        <span class="wnote" role="cell">No raw message signing for key derivation</span>
+        <span class="wnote" role="cell">Via WalletConnect — message signing included</span>
       </div>
     </div>
     <p class="wfoot rev">Stealth private keys are re-derived from a wallet signature each session and
-      held in memory only. The encrypted scan cache unlocks with one signature.</p>
+      held in memory only — never written to storage. The encrypted scan cache unlocks with one signature.</p>
   </section>
 
   <section class="sect" id="dev">

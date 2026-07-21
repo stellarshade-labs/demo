@@ -23,7 +23,9 @@ export interface PayParams {
 
 export function buildPayLink(params: PayParams, origin?: string): string {
   const base = origin ?? (typeof window !== 'undefined' ? window.location.origin : '');
-  const url = new URL('/send', base || 'https://shade.app');
+  // The app is mounted under /app (router basename) — pay links must carry it,
+  // since they are absolute URLs handed to people outside the SPA.
+  const url = new URL('/app/send', base || 'https://shade.app');
   url.searchParams.set('to', params.to.trim());
   if (params.amount) url.searchParams.set('amount', params.amount);
   if (params.asset && params.asset.trim()) url.searchParams.set('asset', params.asset.trim());

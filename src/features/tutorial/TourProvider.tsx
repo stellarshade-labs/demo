@@ -49,6 +49,11 @@ const STEPS: TourStep[] = [
     body: 'Choose how you receive (pool or account), default the relayer, switch theme, and back up or reset your identity.',
   },
   {
+    target: 'identity',
+    title: 'Identities',
+    body: 'The identity you’re acting as. Keep several — say, one personal and one for work — and switch or add more from here.',
+  },
+  {
     target: 'lock',
     title: 'Lock',
     body: 'Your identity auto-locks after 6 hours. Lock it yourself anytime — you’ll re-enter your passphrase to return.',
@@ -206,31 +211,53 @@ function TourOverlay({
 
   return (
     <Portal>
-      {/* Dim everything; clicking the dim skips (like most product tours). */}
-      <div className="fixed inset-0 z-[60] bg-black/60" onClick={onSkip} />
+      {/* Click-catcher: clicking outside the coachmark skips (like most product
+          tours). Transparent — the spotlight ring below carries the dimming. */}
+      <div
+        className={`fixed inset-0 z-[60] ${rect ? '' : 'bg-black/60'}`}
+        onClick={onSkip}
+      />
 
       {rect && (
+        /* Spotlight: the ring's giant shadow dims everything EXCEPT the target,
+           and the ring glides between targets as the step changes. */
         <div
-          className="pointer-events-none fixed z-[61] rounded-[3px] ring-2 ring-copper-500"
+          className="pointer-events-none fixed z-[61] rounded-[3px] ring-2 ring-copper-500 transition-all duration-300 ease-out motion-reduce:transition-none"
           style={{
             top: rect.top - pad,
             left: rect.left - pad,
             width: rect.width + pad * 2,
             height: rect.height + pad * 2,
-            boxShadow: '0 0 0 9999px rgba(0,0,0,0.0)',
+            boxShadow: '0 0 0 9999px rgba(0,0,0,0.62)',
           }}
         />
       )}
 
       <div
-        className="fixed z-[62] w-[min(320px,calc(100vw-1.5rem))] border border-ink-600 bg-ink-850 p-4 shadow-2xl shadow-black/50"
+        className="fixed z-[62] w-[min(320px,calc(100vw-1.5rem))] border border-ink-600 bg-ink-850 p-4 shadow-2xl shadow-black/50 transition-all duration-300 ease-out motion-reduce:transition-none"
         style={bubbleStyle}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-copper-400">
-            Step {index + 1} of {total}
-          </span>
+          {/* Progress as the brand's squares: filled = seen, hollow = ahead. */}
+          <div
+            className="flex items-center gap-1.5"
+            role="img"
+            aria-label={`Step ${index + 1} of ${total}`}
+          >
+            {Array.from({ length: total }, (_, i) => (
+              <span
+                key={i}
+                className={
+                  i < index
+                    ? 'size-1.5 bg-copper-600/50'
+                    : i === index
+                      ? 'size-1.5 bg-copper-500'
+                      : 'size-1.5 border border-ink-600'
+                }
+              />
+            ))}
+          </div>
           <button
             type="button"
             onClick={onSkip}

@@ -204,8 +204,8 @@ function RailContent({
             className={({ isActive }) =>
               `relative flex items-center gap-3 px-4 py-2.5 text-[13px] font-medium transition-colors ${
                 isActive
-                  ? 'text-ink-50 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:bg-copper-500'
-                  : 'text-ink-400 hover:text-ink-100'
+                  ? 'bg-ink-900 text-ink-50 before:absolute before:left-0 before:top-1/2 before:h-5 before:w-0.5 before:-translate-y-1/2 before:bg-copper-500'
+                  : 'text-ink-400 hover:bg-ink-900/60 hover:text-ink-100'
               }`
             }
           >

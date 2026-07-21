@@ -10,6 +10,9 @@ import path from 'node:path';
 // unguarded, and neither ships a `browser` field. Without these polyfills the
 // app dies at the first send/scan call, in dev *and* in the production bundle.
 export default defineConfig({
+  // The whole app lives under /app so the marketing landing can own the site
+  // root; the router carries the matching basename in main.tsx.
+  base: '/app/',
   plugins: [
     // Opt-in self-signed HTTPS for testing on a phone over the LAN: Web Crypto
     // (crypto.subtle — vault encryption, key derivation) is only exposed in a
@@ -37,7 +40,8 @@ export default defineConfig({
         theme_color: '#0b0c0e',
         background_color: '#0b0c0e',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/app/',
+        scope: '/app/',
         icons: [
           {
             src: 'shade-icon.svg',
