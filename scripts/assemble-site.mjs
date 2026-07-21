@@ -34,7 +34,6 @@ cpSync(path.join(ROOT, 'landing/fonts'), path.join(SITE, 'fonts'), { recursive: 
 cpSync(path.join(ROOT, 'landing/fumadocs/docs'), path.join(SITE, 'docs'), { recursive: true });
 cpSync(path.join(ROOT, 'landing/fumadocs/_astro'), path.join(SITE, '_astro'), { recursive: true });
 cpSync(path.join(ROOT, 'landing/fumadocs/api'), path.join(SITE, 'api'), { recursive: true });
-cpSync(path.join(ROOT, 'landing/fumadocs/brand'), path.join(SITE, 'brand'), { recursive: true });
 cpSync(path.join(ROOT, 'dist'), path.join(SITE, 'app'), { recursive: true });
 
 console.log('site/ assembled: / (landing) + /docs + /app');
