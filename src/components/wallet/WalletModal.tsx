@@ -136,7 +136,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                           ? 'Looking for extension…'
                           : c.supportsSignMessage
                             ? 'Send and receive'
-                            : 'Send only — cannot derive stealth keys'}
+                            : 'Send only, cannot derive stealth keys'}
                     </div>
                   </div>
                   {busy && <span className="size-1.5 animate-shade-pulse rounded-full bg-copper-500" />}

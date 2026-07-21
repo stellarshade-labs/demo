@@ -168,7 +168,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       <h1 className="text-2xl font-bold tracking-tight text-ink-50">Welcome to Shade</h1>
       <p className="mt-3 text-sm leading-relaxed text-ink-300">
         Shade lets people pay you privately. Payments land at fresh one-time addresses that nobody
-        can link back to you — only you can find and claim them.
+        can link back to you. Only you can find and claim them.
       </p>
       <p className="mt-3 text-sm leading-relaxed text-ink-400">
         First, create your identity. This is the key that lets you receive and spend. You can build
@@ -221,7 +221,7 @@ export function CreateStep({
     <div>
       <h2 className="text-xl font-bold tracking-tight text-ink-50">Create your identity</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
-        Pick how to generate your keys. All three produce the same kind of identity — the difference
+        Pick how to generate your keys. All three produce the same kind of identity. The difference
         is only how it's created and backed up.
       </p>
 
@@ -229,7 +229,7 @@ export function CreateStep({
         <OptionCard
           icon={<Wallet className="size-4.5" />}
           title="Connect a wallet"
-          description="Derive your identity from a wallet signature. Deterministic — the same wallet always recreates it."
+          description="Derive your identity from a wallet signature. Deterministic: the same wallet always recreates it."
           onClick={() => setMode('wallet')}
         />
         <OptionCard
@@ -241,7 +241,7 @@ export function CreateStep({
         <OptionCard
           icon={<Dice5 className="size-4.5" />}
           title="Random"
-          description="Generate fresh random keys. Back them up with the download file — there's no phrase to memorize."
+          description="Generate fresh random keys. Back them up with the download file, since there's no phrase to memorize."
           loading={identity.creating}
           onClick={async () => {
             if (await identity.createRandom()) onCreated(false);
@@ -332,7 +332,7 @@ function WalletCreate({
           <>
             <div className="flex items-center gap-2 border border-ink-700 bg-ink-900 px-3 py-2.5 text-[13px] text-ink-300">
               <Check className="size-3.5 text-signal-ok" />
-              Connected — signing derives your identity.
+              Connected. Signing derives your identity.
             </div>
             <Button
               variant="primary"
@@ -456,7 +456,7 @@ function ImportBackup({
       <BackLink onClick={onBack} />
       <h2 className="text-xl font-bold tracking-tight text-ink-50">Recover from a backup</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
-        Import the JSON backup file Shade exported. This restores any identity — including a random
+        Import the JSON backup file Shade exported. This restores any identity, including a random
         one, which has no recovery phrase to type.
       </p>
 
@@ -523,7 +523,7 @@ function PassphraseStep({ onBack, onSet }: { onBack: () => void; onSet: (value: 
       <h2 className="text-xl font-bold tracking-tight text-ink-50">Set a passphrase</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
         This encrypts your identity in this browser. You'll re-enter it after your auto-lock window
-        (adjustable in Settings). It can't be recovered — if you forget it, restore from your backup
+        (adjustable in Settings). It can't be recovered. If you forget it, restore from your backup
         instead.
       </p>
 
@@ -663,7 +663,7 @@ export function BackupStep({ identity, onNext }: { identity: IdentityApi; onNext
             setDownloaded(true);
           }}
         >
-          {downloaded ? 'Downloaded — download again' : 'Download backup file'}
+          {downloaded ? 'Downloaded. Download again' : 'Download backup file'}
         </Button>
 
         <Button
@@ -718,7 +718,7 @@ function BackupConfirm({
         <BackLink onClick={onBack} />
         <h2 className="text-xl font-bold tracking-tight text-ink-50">Confirm your backup</h2>
         <p className="mt-2 text-[13px] leading-relaxed text-ink-400">
-          There's no phrase to memorise for this identity — your backup file is the only copy of the
+          There's no phrase to memorise for this identity. Your backup file is the only copy of the
           keys. Make sure you've stored it somewhere safe before continuing.
         </p>
 
@@ -830,7 +830,7 @@ export function PublishStep({
           selected={value}
           icon={<Globe className="size-4.5" />}
           title="Publish my address"
-          description="Anyone can pay you just by knowing your public address — we publish your meta-address on-chain so they can look it up. Convenient, but it's public that this account uses Shade."
+          description="Anyone can pay you just by knowing your public address: we publish your meta-address on-chain so they can look it up. Convenient, but it's public that this account uses Shade."
           onClick={() => onChange(true)}
         />
         <ChoiceCard

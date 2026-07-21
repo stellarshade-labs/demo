@@ -127,7 +127,7 @@ export function WatchOnlyPage() {
             <div className="border-b border-signal-wait/30 bg-signal-wait/5 px-5 py-3 text-[13px] text-signal-wait">
               <div className="flex items-center gap-2">
                 <ShieldOff className="size-3.5 shrink-0" />
-                Watch-only — no spend key. You can see these payments but can't claim them here.
+                Watch-only, no spend key. You can see these payments but can't claim them here.
               </div>
             </div>
 

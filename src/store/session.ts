@@ -112,7 +112,7 @@ export const useSession = create<SessionState>()(
         if (stale.length === 0) return;
         state.transactions = state.transactions.map((tx) =>
           tx.status === 'pending'
-            ? { ...tx, status: 'error' as const, error: 'Interrupted — outcome unknown.' }
+            ? { ...tx, status: 'error' as const, error: 'Interrupted, outcome unknown.' }
             : tx,
         );
       },

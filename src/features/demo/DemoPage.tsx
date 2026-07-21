@@ -52,11 +52,11 @@ export function DemoPage() {
         </h1>
         <p className="mt-1.5 text-[13px] leading-relaxed text-ink-400">
           Watch a private payment travel from <strong className="text-ink-200">Alice</strong> to{' '}
-          <strong className="text-ink-200">Bob</strong> — and watch what the rest of the world sees
+          <strong className="text-ink-200">Bob</strong>, and watch what the rest of the world sees
           while it happens. Nothing here touches the network.
         </p>
         <div className="mt-4">
-          <Notice tone="info">This is a simulation — no real funds, wallet, or transactions.</Notice>
+          <Notice tone="info">This is a simulation. No real funds, wallet, or transactions.</Notice>
         </div>
       </div>
 
@@ -111,7 +111,7 @@ export function DemoPage() {
               <div className="space-y-3">
                 {working && (
                   <div className="relative overflow-hidden border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-[11px] tracking-wider text-ink-400 animate-shade-sheen">
-                    VIEW KEY — SCANNING LEDGER…
+                    VIEW KEY · SCANNING LEDGER…
                   </div>
                 )}
                 <Button
@@ -130,7 +130,7 @@ export function DemoPage() {
                 </div>
                 <ResultLine>
                   Matched <span className="font-mono text-ink-100">25 XLM</span> at{' '}
-                  <span className="font-mono text-ink-100">{STEALTH_ADDR}</span> — only Bob's key
+                  <span className="font-mono text-ink-100">{STEALTH_ADDR}</span>. Only Bob's key
                   makes this match
                 </ResultLine>
               </div>
@@ -165,7 +165,7 @@ export function DemoPage() {
                   <span className="font-mono text-ink-100">{CLAIM_TX}</span>
                 </ResultLine>
                 <p className="text-ink-400">
-                  Done. On-chain, nothing connects Alice's payment to Bob's account — that link only
+                  Done. On-chain, nothing connects Alice's payment to Bob's account. That link only
                   ever existed inside Bob's keys.
                 </p>
               </div>
@@ -199,7 +199,7 @@ function ObserverPanel({ stage }: { stage: Stage }) {
     <aside className="lg:sticky lg:top-20 lg:self-start">
       <Panel eyebrow="Observer view" title="What the chain sees">
         <p className="mb-4 text-[13px] leading-relaxed text-ink-400">
-          The public ledger, as anyone — an explorer, an exchange, an ex — sees it.
+          The public ledger, as anyone sees it.
         </p>
 
         <div className="space-y-1.5 font-mono text-[11px] leading-relaxed">
@@ -227,13 +227,13 @@ function ObserverPanel({ stage }: { stage: Stage }) {
           {stage === 0 && <p>Nothing yet. Alice hasn't sent.</p>}
           {stage >= 1 && (
             <ObserverNote>
-              Alice paid <span className="font-mono">{STEALTH_ADDR}</span> — an address that has
+              Alice paid <span className="font-mono">{STEALTH_ADDR}</span>, an address that has
               never appeared before and never will again. Nothing points at Bob.
             </ObserverNote>
           )}
           {stage >= 2 && (
             <ObserverNote muted>
-              Bob just scanned — and the chain saw <em>nothing</em>. Scanning happens locally, with
+              Bob just scanned, and the chain saw <em>nothing</em>. Scanning happens locally, with
               his view key.
             </ObserverNote>
           )}

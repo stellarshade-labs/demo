@@ -270,7 +270,7 @@ export function ClaimList() {
                     <p className="mt-1.5 text-ink-300">
                       {relayerAvailable
                         ? useRelayer
-                          ? 'Submit through relayer is on, which hides your IP and fee-payer link — good.'
+                          ? 'Submit through relayer is on, which hides your IP and fee-payer link.'
                           : 'Consider enabling Submit through relayer below first: it hides your IP and the fee-payer link.'
                         : 'The relayer, which would hide your IP and fee-payer link, is unavailable right now.'}
                     </p>
@@ -421,12 +421,12 @@ export function ClaimList() {
           Submit through relayer
           <span className="text-ink-600">
             {health.relayerRequiresCredit
-              ? '— unavailable, relayer is credit-gated'
+              ? ' — unavailable, relayer is credit-gated'
               : health.relayer === 'down'
-                ? '— unavailable, relayer unreachable'
+                ? ' — unavailable, relayer unreachable'
                 : walletFree
-                  ? '— sponsors the fee, no wallet needed'
-                  : '— hides your IP and fee-payer link'}
+                  ? ' — sponsors the fee, no wallet needed'
+                  : ' — hides your IP and fee-payer link'}
           </span>
         </label>
         <span className="font-mono text-[10px] text-ink-600">

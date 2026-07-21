@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Shade — Unlinkable payments on Stellar</title>
-<meta name="description" content="Stealth addresses on Stellar. Funds are sent to a fresh one-time address per transfer — nothing on-chain links a payment to you.">
+<meta name="description" content="Stealth addresses on Stellar. Every transfer lands at a fresh one-time address, so nothing on-chain links a payment to you.">
 <meta property="og:title" content="Shade — Unlinkable payments on Stellar">
 <meta property="og:description" content="Every payment draws a line. Shade severs it.">
 <meta name="theme-color" content="#0b0c0e">
@@ -362,7 +362,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
     <a class="lnk" href="#wallets">Wallets</a>
     <a class="lnk" href="#dev">Developers</a>
     <a class="lnk" href="/docs/">Docs</a>
-    <a class="gh" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener" aria-label="GitHub repository">
+    <a class="gh" href="https://github.com/stellarshade-labs/Shade" target="_blank" rel="noopener" aria-label="GitHub repository">
       <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
     </a>
     <a class="btn btn-copper" href="/app/">Launch demo</a>
@@ -389,7 +389,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
       <span class="ch">S</span><span class="ch">H</span><span class="ch">A</span><span class="ch">D</span><span class="ch">E</span>
     </h1>
     <p class="sub" id="herosub">Private payments on a public ledger. Every transfer lands at a fresh
-      one-time address — <b>nothing on-chain links it to you.</b></p>
+      one-time address, so <b>nothing on-chain links it to you.</b></p>
     <div class="ctas" id="heroctas">
       <a class="btn btn-copper btn-lg" href="/app/">Launch demo</a>
       <a class="btn btn-ghost btn-lg" href="#how">How it works</a>
@@ -420,7 +420,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
       </div>
     </div>
     <div class="obschip" id="obschip1" role="status">
-      <span class="s1" id="obs1a">Observer — watching</span>
+      <span class="s1" id="obs1a">Observer · watching</span>
       <span class="s2" id="obs1b" style="opacity:0">Link confirmed · trail recorded</span>
     </div>
     <div class="beat beat-bl" id="beatLink">
@@ -463,7 +463,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
     <div class="beat beat-bl" id="beatSever">
       <span class="eyebrow">02 · Severance</span>
       <h2>Shade severs it.</h2>
-      <p>Each transfer derives a fresh stealth address. The sender pays in — on-chain, a stranger receives.</p>
+      <p>Each transfer derives a fresh stealth address. The sender pays in. On-chain, a stranger receives.</p>
     </div>
   </div>
 </section>
@@ -490,7 +490,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
     <div class="gridwrap"><div class="vgrid" id="vgrid"></div></div>
     <div class="sweep" id="sweep" aria-hidden="true"></div>
     <div class="vkchip" id="vkchip" role="status">
-      <span class="s1" id="vk1">View key — scanning</span>
+      <span class="s1" id="vk1">View key · scanning</span>
       <span class="s2" id="vk2" style="opacity:0">1 payment detected</span>
     </div>
     <div class="claimlock" id="claimlock" aria-hidden="true">
@@ -530,8 +530,8 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   <section class="sect" id="how">
     <span class="eyebrow rev">Protocol</span>
     <h2 class="display rev">Three moves. No trail.</h2>
-    <p class="lead rev">Shade runs on stealth addresses: a Soroban pool contract, a meta-address published
-      once by the recipient, and per-transfer keys nobody can connect.</p>
+    <p class="lead rev">Shade runs on stealth addresses: a Soroban pool contract, a meta-address the
+      recipient publishes once, and per-transfer keys nobody can connect.</p>
     <div class="steps">
       <div class="step rev">
         <span class="n">01 / PUBLISH</span>
@@ -559,7 +559,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
           </svg>
         </div>
         <h3>Send anywhere</h3>
-        <p>Enter an ordinary G address or a meta-address — either way a fresh one-time stealth address
+        <p>Enter an ordinary G address or a meta-address. Either way, a fresh one-time stealth address
           is derived and paid. No two transfers share one.</p>
       </div>
       <div class="step rev">
@@ -573,7 +573,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
         </div>
         <h3>Claim quietly</h3>
         <p>Your view key detects incoming payments; claiming moves the funds to your account. Keys live
-          in memory only — never written to storage.</p>
+          in memory only, never written to storage.</p>
       </div>
     </div>
   </section>
@@ -581,8 +581,8 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   <section class="sect" id="wallets">
     <span class="eyebrow rev">Wallets</span>
     <h2 class="display rev">Bring your own signer.</h2>
-    <p class="lead rev">Wallets plug in through one connector interface. Stealth keys derive from one
-      wallet signature — supported in the extension and over WalletConnect on mobile.</p>
+    <p class="lead rev">Wallets plug in through one connector interface. Stealth keys derive from a single
+      wallet signature, in the extension and over WalletConnect on mobile.</p>
     <div class="wtable rev" role="table" aria-label="Wallet support">
       <div class="wrow" role="row">
         <span class="h" role="columnheader">Wallet</span>
@@ -594,23 +594,23 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
         <span class="wname" role="cell"><i></i>Freighter</span>
         <span class="wmark y" role="cell">YES</span>
         <span class="wmark y" role="cell">YES</span>
-        <span class="wnote" role="cell">Browser extension — full support</span>
+        <span class="wnote" role="cell">Browser extension, full support</span>
       </div>
       <div class="wrow" role="row">
         <span class="wname" role="cell"><i></i>Freighter mobile</span>
         <span class="wmark y" role="cell">YES</span>
         <span class="wmark y" role="cell">YES</span>
-        <span class="wnote" role="cell">Via WalletConnect — message signing included</span>
+        <span class="wnote" role="cell">Via WalletConnect, with message signing</span>
       </div>
     </div>
     <p class="wfoot rev">Stealth private keys are re-derived from a wallet signature each session and
-      held in memory only — never written to storage. The encrypted scan cache unlocks with one signature.</p>
+      held in memory only, never written to storage. The encrypted scan cache opens with one signature.</p>
   </section>
 
   <section class="sect" id="dev">
     <span class="eyebrow rev">Developers</span>
     <h2 class="display rev">One package.</h2>
-    <p class="lead rev">The demo is a reference client for the <span class="mono">stellar-shade</span> SDK —
+    <p class="lead rev">The demo is a reference client for the <span class="mono">stellar-shade</span> SDK:
       stealth key derivation, the Soroban pool contract, relayer and indexer clients.</p>
     <div class="devwell rev">
       <div class="cmd">
@@ -621,9 +621,9 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
         </button>
       </div>
       <div class="devlinks">
-        <a href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">
+        <a href="https://github.com/stellarshade-labs/Shade" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
-          demo source
+          source
         </a>
         <a href="https://www.npmjs.com/package/stellar-shade" target="_blank" rel="noopener">
           <svg width="16" height="16" viewBox="0 0 27.23 27.23" fill="currentColor" aria-hidden="true"><path d="M0 0h27.23v27.23H0V0zm5.13 5.13v17h8.5v-13.6h5.1v13.6h3.4v-17H5.13z"/></svg>
@@ -633,7 +633,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
     </div>
     <div class="warn rev">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--copper-400)" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <p><b>Testnet only.</b> The Shade protocol's cryptography is pending external audit — don't use
+      <p><b>Testnet only.</b> The Shade protocol's cryptography is pending external audit. Don't use
         it with real value.</p>
     </div>
   </section>
@@ -641,7 +641,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   <section class="sect" id="docs">
     <span class="eyebrow rev">Documentation</span>
     <h2 class="display rev">Read the protocol.</h2>
-    <p class="lead rev">The math, the contract, the CLI and the SDK — written down properly.</p>
+    <p class="lead rev">The math, the contract, the CLI and the SDK, written down properly.</p>
     <div class="docgrid">
       <a class="doccard rev" href="/docs/">
         <span class="n">LEARN</span>
@@ -652,7 +652,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
       <a class="doccard rev" href="/docs/getting-started/">
         <span class="n">BUILD</span>
         <h3>Ship with it</h3>
-        <p>From npm install to a claimed payment — CLI reference, SDK reference, and running your own relayer.</p>
+        <p>Everything from npm install to a claimed payment: CLI reference, SDK reference, and running your own relayer.</p>
         <span class="dc-more">Getting started · CLI · SDK · Relayer</span>
       </a>
       <a class="doccard rev" href="/docs/security/">
@@ -671,7 +671,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
     <p class="lead rev">Two testnet accounts. Five minutes. One vanished trail.</p>
     <div class="ctas rev">
       <a class="btn btn-copper btn-lg" href="/app/">Launch demo</a>
-      <a class="btn btn-ghost btn-lg" href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">View source</a>
+      <a class="btn btn-ghost btn-lg" href="https://github.com/stellarshade-labs/Shade" target="_blank" rel="noopener">View source</a>
     </div>
   </section>
 
@@ -688,7 +688,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
       <span class="tag">— stealth addresses on Stellar · testnet</span>
     </div>
     <div class="r">
-      <a href="https://github.com/stellarshade-labs/demo" target="_blank" rel="noopener">
+      <a href="https://github.com/stellarshade-labs/Shade" target="_blank" rel="noopener">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
         GitHub
       </a>

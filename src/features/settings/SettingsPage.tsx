@@ -91,7 +91,7 @@ export function SettingsPage() {
             label="Default receive method"
             help={
               <>
-                You choose how funds reach you — senders don't. Shade passes this method
+                You choose how funds reach you, not senders. Shade passes this method
                 automatically when someone pays your published address.
                 <br />
                 <br />
@@ -121,7 +121,7 @@ export function SettingsPage() {
                 )}
               {pub.publishState !== 'published' && (
                 <span className="text-[11px] text-ink-500">
-                  Not in effect yet — this is written when you{' '}
+                  Not in effect yet. This is written when you{' '}
                   <Link
                     to="/receive"
                     className="text-copper-400 underline decoration-copper-500/40 underline-offset-2 hover:decoration-copper-500"
@@ -282,10 +282,10 @@ export function SettingsPage() {
                 asked again. The window slides forward while you're active.
                 <br />
                 <br />
-                <strong>Instant</strong> keeps your identity in memory only — nothing resumable is
+                <strong>Instant</strong> keeps your identity in memory only. Nothing resumable is
                 stored, so closing or reloading the tab re-locks it immediately (most private).
                 <br />
-                <strong>Never</strong> keeps it unlocked in this browser indefinitely — convenient,
+                <strong>Never</strong> keeps it unlocked in this browser indefinitely. Convenient,
                 but anyone with access to this device's storage could open it. Use a short window on
                 shared machines.
               </>
@@ -417,7 +417,7 @@ function PasskeySettings({ identity }: { identity: ReturnType<typeof useIdentity
           <>
             Enroll a passkey (Face ID, Touch ID, Windows Hello, or a security key) to unlock this
             vault with a tap instead of your passphrase. Your wrap key is sealed under the passkey's
-            PRF secret — nothing secret is stored in the clear, and the passphrase always keeps
+            PRF secret. Nothing secret is stored in the clear, and the passphrase always keeps
             working as a fallback.
           </>
         }
@@ -565,7 +565,7 @@ function ViewExportControls({ identity }: { identity: ReturnType<typeof useIdent
     <div className="space-y-4">
       <p className="text-[13px] leading-relaxed text-ink-400">
         Share a view-only key for your active identity. It lets another device (or a trusted person)
-        watch your incoming payments without any ability to spend them — the spend key never leaves
+        watch your incoming payments without any ability to spend them. The spend key never leaves
         this browser. Open it in{' '}
         <Link
           to="/view"
@@ -782,7 +782,7 @@ function BackupControls({ identity }: { identity: ReturnType<typeof useIdentity>
     <div className="space-y-5">
       <Row
         label="Backup"
-        help="Re-download your identity backup, or reveal your keys to copy them. Anyone with these can spend your funds — handle with care."
+        help="Re-download your identity backup, or reveal your keys to copy them. Anyone with these can spend your funds, so handle with care."
       >
         <Button
           size="sm"

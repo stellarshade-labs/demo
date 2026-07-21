@@ -127,7 +127,7 @@ export function NotificationsSettings() {
           help={
             <>
               Show a browser notification when a new payment is detected while a Shade tab is open.
-              Requires notification permission. Note: this can't wake a fully-closed app — no browser
+              Requires notification permission. Note: this can't wake a fully-closed app. No browser
               reliably runs background scans once every tab is closed.
             </>
           }
@@ -147,7 +147,7 @@ export function NotificationsSettings() {
             : permission === 'granted'
               ? 'Permission granted.'
               : permission === 'denied'
-                ? 'Permission blocked — enable notifications for this site in your browser settings.'
+                ? 'Permission blocked. Enable notifications for this site in your browser settings.'
                 : 'Permission not yet requested.'}
         </p>
 
@@ -158,7 +158,7 @@ export function NotificationsSettings() {
             help={
               <>
                 Automatically claim each new payment after a random delay, with no clicking. Runs
-                only when it can claim without a wallet popup — with your payout secret, or through
+                only when it can claim without a wallet popup, with your payout secret, or through
                 the relayer. Applies to pool payments only; account-method payments are claimed
                 manually. Off by default: auto-claiming is a privacy trade-off (see the warning).
               </>
@@ -195,7 +195,7 @@ export function NotificationsSettings() {
                 <p className="mt-1.5 text-ink-300">
                   Claiming moves funds from a one-time stealth address into your payout account, so
                   every auto-claimed payment becomes linked to that one account on-chain. Auto-claim
-                  does this for you, continuously — the more you claim, the more of your incoming
+                  does this for you, continuously, so the more you claim, the more of your incoming
                   activity an observer can attribute to you.
                 </p>
                 <p className="mt-1.5 text-ink-300">
@@ -213,7 +213,7 @@ export function NotificationsSettings() {
                     Cancel
                   </Button>
                   <Button size="sm" variant="danger" onClick={confirmAuto}>
-                    I understand — enable auto-claim
+                    I understand, enable auto-claim
                   </Button>
                 </div>
               </Notice>
@@ -262,7 +262,7 @@ export function NotificationsSettings() {
             help={
               <>
                 Install Shade as a standalone app on this device for a dedicated window and quicker
-                access. Installing does not enable background scanning — the app still scans when
+                access. Installing does not enable background scanning. The app still scans when
                 it's open.
               </>
             }

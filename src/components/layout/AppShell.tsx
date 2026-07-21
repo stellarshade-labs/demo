@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
   Check,
@@ -138,7 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <footer className="border-t border-ink-700 px-4 py-4 text-xs text-ink-600 sm:px-6">
           Demo build against Shade on {NETWORK.label}. The protocol's cryptography is pending
-          external audit — do not use it with real value.
+          external audit, so do not use it with real value.
         </footer>
       </div>
 
@@ -189,10 +189,17 @@ function RailContent({
   return (
     <>
       <div className="flex h-14 items-center gap-2.5 border-b border-ink-700 px-4">
-        <ShadeMark
-          className={`size-5 shrink-0 text-copper-500 ${scan.loading ? 'animate-shade-pulse' : ''}`}
-        />
-        <span className="text-[15px] font-bold tracking-tight text-ink-50">Shade</span>
+        <Link
+          to="/"
+          onClick={onNavigate}
+          aria-label="Shade home"
+          className="flex items-center gap-2.5 rounded-[3px] outline-none focus-visible:ring-2 focus-visible:ring-copper-500"
+        >
+          <ShadeMark
+            className={`size-5 shrink-0 text-copper-500 ${scan.loading ? 'animate-shade-pulse' : ''}`}
+          />
+          <span className="text-[15px] font-bold tracking-tight text-ink-50">Shade</span>
+        </Link>
         {onClose && (
           <button
             type="button"

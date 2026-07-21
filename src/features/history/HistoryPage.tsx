@@ -117,7 +117,7 @@ export function HistoryPage() {
         <div>
           <h1 className="text-lg font-bold tracking-tight text-ink-50 sm:text-xl">Activity</h1>
           <p className="mt-1.5 max-w-xl text-[13px] leading-relaxed text-ink-400">
-            Everything this browser has done. Kept locally — it survives a refresh but never leaves
+            Everything this browser has done. Kept locally, so it survives a refresh but never leaves
             your machine.
           </p>
         </div>
@@ -374,7 +374,7 @@ function AnnouncementFeed() {
       }
     >
       <p className="border-b border-ink-700 px-5 py-3 text-xs leading-relaxed text-ink-500">
-        Every stealth deposit on this network. Indistinguishable from one another — that shared
+        Every stealth deposit on this network. Indistinguishable from one another, and that shared
         crowd is what makes any single payment private.
       </p>
 

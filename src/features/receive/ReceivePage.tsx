@@ -127,7 +127,7 @@ export function ReceivePage() {
                     onClick={() => void balance.reload()}
                     className="text-sm font-normal text-signal-bad underline decoration-signal-bad/40 underline-offset-2 transition-colors hover:text-signal-bad/80"
                   >
-                    Couldn&apos;t load balance — retry
+                    Couldn&apos;t load balance. Retry
                   </button>
                 ) : (
                   <Skeleton className="h-7 w-28" />
@@ -229,8 +229,8 @@ export function ReceivePage() {
               <CopyField value={payoutAddress ?? ''} display={truncate(payoutAddress, 10, 8)} />
               <p className="mt-1.5 text-xs leading-relaxed text-ink-500">
                 {source === 'wallet'
-                  ? 'This is your connected wallet — senders pay you here.'
-                  : "Derived from your keys — this is your public address even without a wallet. Fund it (Balance panel above) to activate it on-chain, then you can publish."}
+                  ? 'This is your connected wallet. Senders pay you here.'
+                  : "Derived from your keys, this is your public address even without a wallet. Fund it (Balance panel above) to activate it on-chain, then you can publish."}
               </p>
             </div>
 

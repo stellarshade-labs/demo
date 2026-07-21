@@ -31,7 +31,7 @@ const STEPS: TourStep[] = [
   {
     target: 'nav-send',
     title: 'Send',
-    body: 'Pay anyone privately. Enter their public address (or meta-address) and an amount — Shade derives a fresh one-time address for the transfer.',
+    body: 'Pay anyone privately. Enter their public address (or meta-address) and an amount, and Shade derives a fresh one-time address for the transfer.',
   },
   {
     target: 'nav-receive',
@@ -51,12 +51,12 @@ const STEPS: TourStep[] = [
   {
     target: 'identity',
     title: 'Identities',
-    body: 'The identity you’re acting as. Keep several — say, one personal and one for work — and switch or add more from here.',
+    body: 'The identity you’re acting as. Keep several (say, one personal and one for work) and switch or add more from here.',
   },
   {
     target: 'lock',
     title: 'Lock',
-    body: 'Your identity auto-locks after 6 hours. Lock it yourself anytime — you’ll re-enter your passphrase to return.',
+    body: 'Your identity auto-locks after 6 hours. Lock it yourself anytime, and you’ll re-enter your passphrase to return.',
   },
   {
     target: 'theme',
@@ -66,7 +66,7 @@ const STEPS: TourStep[] = [
   {
     target: 'nav-demo',
     title: 'Have questions?',
-    body: 'See the end-to-end demo! Walk through a full send → scan → claim with two example users — no funds, no wallet, just the flow.',
+    body: 'See the end-to-end demo! Walk through a full send → scan → claim with two example users. No funds, no wallet, just the flow.',
     final: true,
   },
 ];

@@ -49,7 +49,7 @@ export function AddIdentityModal({ open, onClose }: { open: boolean; onClose: ()
                 Create another identity
               </h2>
               <p className="mt-1.5 text-[13px] leading-relaxed text-ink-400">
-                It joins this vault under the same passphrase — no new passphrase needed.
+                It joins this vault under the same passphrase, so no new passphrase needed.
               </p>
             </div>
 

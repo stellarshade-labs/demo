@@ -303,7 +303,7 @@ export function SendPage() {
                     setMethodOverride(null);
                   }}
                   error={resolution.state === 'invalid' ? resolution.message : null}
-                  hint="Shared with you directly by the recipient — no lookup needed. Delivers via pool unless you opened a pay-link."
+                  hint="Shared with you directly by the recipient, no lookup needed. Delivers via pool unless you opened a pay-link."
                   className="[&>label]:sr-only"
                 />
               )}
@@ -322,16 +322,16 @@ export function SendPage() {
                     can change it.
                     <br />
                     <br />
-                    <strong>Pool:</strong> value sits in the stealth-pool contract until they claim —
-                    private, any asset, cheapest.
+                    <strong>Pool:</strong> value sits in the stealth-pool contract until they claim.
+                    Private, any asset, cheapest.
                     <br />
-                    <strong>Account:</strong> a one-time classic account is funded for them — native
+                    <strong>Account:</strong> a one-time classic account is funded for them. Native
                     XLM only, and sending a token this way costs you ~1.5 XLM.
                   </HelpTip>
                 </div>
                 <MethodPicker value={effectiveMethod} onChange={(m) => setMethodOverride(m)} />
                 <p className="mt-1.5 text-xs text-ink-500">
-                  Starts from the recipient&apos;s preference — change it if you need to.
+                  Starts from the recipient&apos;s preference. Change it if you need to.
                 </p>
               </div>
             )}
@@ -515,7 +515,7 @@ function AccountTokenWarning({
           <strong className="font-semibold">This recipient receives to an account.</strong> Sending{' '}
           <span className="font-mono">{asset}</span> this way draws{' '}
           <strong>~1.5 XLM</strong> from your balance to fund their one-time stealth account. That
-          XLM is spent — it is <strong>not</strong> returned to you.
+          XLM is spent. It is <strong>not</strong> returned to you.
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -620,7 +620,7 @@ function ResolutionStatus({
           <div>
             <strong className="font-semibold">Not registered with Shade.</strong> This account has
             not published a meta-address, so a stealth address can't be derived for it. Ask them to
-            publish theirs — or switch to the Meta-address tab if they sent you one directly.
+            publish theirs, or switch to the Meta-address tab if they sent you one directly.
           </div>
         </div>
       </Notice>
