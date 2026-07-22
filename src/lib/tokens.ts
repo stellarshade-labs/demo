@@ -1,12 +1,15 @@
 /**
  * Quick-access tokens for payment requests.
  *
- * Issuers are Stellar MAINNET addresses. This demo runs on testnet, where they
- * won't resolve, so the asset field in the UI stays fully editable — a blank or
- * wrong issuer is easily corrected. Edit this list to curate the quick chips for
- * your own deployment. (Only USDC ships with a preset issuer; the others are
- * intentionally left blank rather than guessed, so you paste the right one.)
+ * The list is curated per network off NETWORK.isTestnet so every chip resolves
+ * on the network the demo is actually running against: testnet issuers on
+ * testnet, mainnet issuers on mainnet. Only assets with a verified issuer for
+ * the active network are shown — placeholders with blank or wrong issuers are
+ * deliberately omitted. Edit these lists to curate the quick chips for your own
+ * deployment.
  */
+import { NETWORK } from '@/config/network';
+
 export interface CommonToken {
   code: string;
   /** Issuer G-address, or '' when it must be supplied per network. */
@@ -14,11 +17,19 @@ export interface CommonToken {
   label: string;
 }
 
-export const COMMON_TOKENS: CommonToken[] = [
-  { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN', label: 'USD Coin' },
-  { code: 'USDT', issuer: '', label: 'Tether USD' },
-  { code: 'EURC', issuer: '', label: 'Euro Coin' },
+// Circle's USDC on Stellar testnet (verified: StellarExpert testnet + Circle docs).
+const TESTNET_TOKENS: CommonToken[] = [
+  { code: 'USDC', issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5', label: 'USD Coin' },
 ];
+
+// Circle's USDC on Stellar mainnet. EURC is intentionally left out until a
+// verified mainnet EURC issuer is added rather than guessing one. USDT is
+// dropped entirely — there is no reliable canonical Stellar USDT issuer.
+const MAINNET_TOKENS: CommonToken[] = [
+  { code: 'USDC', issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN', label: 'USD Coin' },
+];
+
+export const COMMON_TOKENS: CommonToken[] = NETWORK.isTestnet ? TESTNET_TOKENS : MAINNET_TOKENS;
 
 /** `CODE:ISSUER` (or just `CODE` when the issuer isn't preset yet). */
 export function assetString(token: CommonToken): string {
