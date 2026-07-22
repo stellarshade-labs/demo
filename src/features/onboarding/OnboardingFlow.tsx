@@ -9,6 +9,7 @@ import {
   Globe,
   KeyRound,
   Lock,
+  Send,
   ShieldCheck,
   Upload,
   Wallet,
@@ -16,6 +17,7 @@ import {
 import { useWallet } from '@/wallet/WalletProvider';
 import { useIdentity } from '@/identity/IdentityProvider';
 import type { IdentitySource } from '@/identity/identityCrypto';
+import { useSession } from '@/store/session';
 import { downloadBackup } from '@/identity/backup';
 import { truncateMeta } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
@@ -151,6 +153,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
 // --- Step 1: welcome --------------------------------------------------------
 
 function WelcomeStep({ onNext }: { onNext: () => void }) {
+  const setSendOnly = useSession((s) => s.setSendOnly);
   return (
     <div>
       {/* The mark assembles itself: the shadow square slides into its offset —
@@ -178,6 +181,16 @@ function WelcomeStep({ onNext }: { onNext: () => void }) {
       </p>
       <Button variant="primary" className="mt-8 w-full" icon={<ArrowRight className="size-4" />} onClick={onNext}>
         Create my identity
+      </Button>
+      {/* Sending needs only a wallet, never an identity — let people who just
+          want to pay someone skip key creation and drop straight into Send. */}
+      <Button
+        variant="ghost"
+        className="mt-3 w-full"
+        icon={<Send className="size-4" />}
+        onClick={() => setSendOnly(true)}
+      >
+        Skip — I only want to send
       </Button>
     </div>
   );

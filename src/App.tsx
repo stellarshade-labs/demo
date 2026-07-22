@@ -16,6 +16,7 @@ import { WatchOnlyPage } from '@/features/view/WatchOnlyPage';
 import { ScanProvider } from '@/stealth/ScanProvider';
 import { NotificationHost } from '@/notifications/NotificationHost';
 import { AutoPublishHost } from '@/notifications/AutoPublishHost';
+import { useSession } from '@/store/session';
 
 export function App() {
   return (
@@ -42,6 +43,7 @@ export function App() {
  */
 function Gate() {
   const { hydrated, status } = useIdentity();
+  const sendOnly = useSession((s) => s.sendOnly);
   const tour = useTour();
 
   if (!hydrated) {
@@ -49,6 +51,22 @@ function Gate() {
       <div className="flex min-h-screen items-center justify-center bg-ink-950">
         <Loader2 className="size-5 animate-spin text-copper-500" />
       </div>
+    );
+  }
+
+  // Send-only mode: the user skipped identity creation. With no vault, only Send
+  // works (it needs a wallet, not an identity), so we lock the app to /send —
+  // every other route and any direct URL bounces back. An existing unlocked
+  // vault always takes precedence, so this only applies before one exists.
+  if (sendOnly && status === 'absent') {
+    return (
+      <AppShell sendOnly>
+        <Routes>
+          <Route path="/" element={<Navigate to="/send" replace />} />
+          <Route path="/send" element={<SendPage />} />
+          <Route path="*" element={<Navigate to="/send" replace />} />
+        </Routes>
+      </AppShell>
     );
   }
 

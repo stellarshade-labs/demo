@@ -36,6 +36,8 @@ interface SessionState {
   walletPassphrase: string | null;
   /** Which send tab was last used, so the UI reopens where you left it. */
   sendMode: 'public' | 'meta';
+  /** Send-only mode: the user skipped identity creation and can only send. */
+  sendOnly: boolean;
   transactions: TxRecord[];
 
   setConnection: (input: {
@@ -45,6 +47,7 @@ interface SessionState {
   }) => void;
   clearConnection: () => void;
   setSendMode: (mode: 'public' | 'meta') => void;
+  setSendOnly: (v: boolean) => void;
 
   addTx: (tx: Omit<TxRecord, 'id' | 'createdAt'> & { id?: string }) => string;
   updateTx: (id: string, patch: Partial<Omit<TxRecord, 'id'>>) => void;
@@ -66,6 +69,7 @@ export const useSession = create<SessionState>()(
       address: null,
       walletPassphrase: null,
       sendMode: 'public',
+      sendOnly: false,
       transactions: [],
 
       setConnection: ({ walletId, address, walletPassphrase }) =>
@@ -74,6 +78,8 @@ export const useSession = create<SessionState>()(
       clearConnection: () => set({ walletId: null, address: null, walletPassphrase: null }),
 
       setSendMode: (sendMode) => set({ sendMode }),
+
+      setSendOnly: (sendOnly) => set({ sendOnly }),
 
       addTx: (tx) => {
         const id = tx.id ?? nextId();
@@ -101,6 +107,7 @@ export const useSession = create<SessionState>()(
         address: state.address,
         walletPassphrase: state.walletPassphrase,
         sendMode: state.sendMode,
+        sendOnly: state.sendOnly,
         transactions: state.transactions,
       }),
       // A transaction left "pending" when the tab closed can never resolve — we
