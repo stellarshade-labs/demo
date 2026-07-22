@@ -97,6 +97,7 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
 .btn-lg{font-size:13px;padding:15px 26px}
 @media(max-width:760px){
   .nav a.lnk{display:none}
+  .nav a.lnk[href="/docs/"]{display:inline}
   #hero .tick-col.c2{display:none}
   #hero .tick-col.c1,#hero .tick-col.c3{opacity:.16}
 }
@@ -344,6 +345,19 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   transform:none;margin:0 auto 30px;width:max-content}
 @media(prefers-reduced-motion:reduce){
   #hero .cue i::after{animation:none}
+}
+
+/* ——— phone-size film adjustments (late in the sheet so they win) ——— */
+@media(max-width:760px){
+  /* inline-positioned label: pin to the card's right edge and let it wrap */
+  .otlabel{
+    left:auto!important;right:0!important;transform:none!important;
+    white-space:normal;max-width:220px;text-align:right;
+  }
+  /* tighten the corridor so more than one address is on screen at a time */
+  #corridor .track{gap:44px;padding:0 40vw 0 50vw}
+  .cell.d2{transform:scale(.8)}
+  .cell.d3{transform:scale(.6)}
 }
 </style>
 </head>
