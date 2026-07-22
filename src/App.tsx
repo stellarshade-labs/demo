@@ -15,6 +15,7 @@ import { DemoPage } from '@/features/demo/DemoPage';
 import { WatchOnlyPage } from '@/features/view/WatchOnlyPage';
 import { ScanProvider } from '@/stealth/ScanProvider';
 import { NotificationHost } from '@/notifications/NotificationHost';
+import { AutoPublishHost } from '@/notifications/AutoPublishHost';
 
 export function App() {
   return (
@@ -76,6 +77,7 @@ function Gate() {
         </Routes>
       </AppShell>
       <NotificationHost />
+      <AutoPublishHost />
     </ScanProvider>
   );
 }

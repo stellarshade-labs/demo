@@ -31,7 +31,7 @@ import { useTheme, type ThemePreference } from '@/theme/ThemeProvider';
 import { useTour } from '@/features/tutorial/TourProvider';
 import { ContactsSettings } from '@/contacts/ContactsSettings';
 import { NotificationsSettings } from '@/notifications/NotificationsSettings';
-import { truncateMeta, looksLikeStellarAddress } from '@/lib/format';
+import { truncate, truncateMeta, looksLikeStellarAddress } from '@/lib/format';
 import { buildViewExport } from '@/lib/viewExport';
 import { isWebAuthnAvailable, isPlatformAuthenticatorAvailable } from '@/lib/webauthn';
 import { toUserMessage } from '@/lib/errors';
@@ -180,11 +180,13 @@ export function SettingsPage() {
             />
           </Row>
 
-          {!pub.canManage && (
+          {pub.manageBlock && (
             <Notice tone="info">
-              {pub.source === 'wallet'
+              {pub.manageBlock === 'wallet-disconnected'
                 ? 'Connect your wallet to change publishing.'
-                : 'Your payout account needs a little XLM before it can publish.'}
+                : pub.manageBlock === 'wallet-mismatch'
+                  ? `This identity belongs to a different wallet (${truncate(pub.payoutAddress, 4, 4)}). Reconnect that wallet to publish or manage it.`
+                  : 'Your payout account needs a little XLM before it can publish.'}
             </Notice>
           )}
 
