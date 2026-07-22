@@ -12,7 +12,7 @@ import type { PasskeyRecord } from '@/lib/webauthn';
  * payments). Decrypted keys live in IdentityProvider's React state only.
  */
 
-export type ReceiveMethod = 'account' | 'pool';
+export type ReceiveMethod = 'account' | 'pool' | 'auto';
 
 /** Non-secret view of one identity, safe to persist and render. */
 export interface PublicIdentity {
@@ -67,7 +67,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  receiveMethod: 'pool',
+  receiveMethod: 'auto',
   useRelayerByDefault: true,
   claimDestination: '',
   autoScanOnOpen: true,
@@ -134,7 +134,7 @@ export const useIdentityStore = create<IdentityStoreState>()(
     }),
     {
       name: 'shade.identity',
-      version: 3,
+      version: 4,
       // v1 stored a single `record`; wrap it into a one-identity vault so existing
       // users keep their (still-encrypted) identity across the upgrade.
       migrate: (persisted, version) => {
@@ -159,6 +159,13 @@ export const useIdentityStore = create<IdentityStoreState>()(
             activeId: id,
           };
           delete state.record;
+        }
+        // v4 introduces the 'auto' delivery method: senders route XLM via account
+        // and tokens via pool, whichever is cheapest that works. Migrate existing
+        // preferences to 'auto' — it's safe (it picks the best route) and users can
+        // re-pin pool/account later in Settings.
+        if (version < 4 && state.settings) {
+          state.settings.receiveMethod = 'auto';
         }
         return state as IdentityStoreState;
       },

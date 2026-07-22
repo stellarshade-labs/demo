@@ -33,7 +33,8 @@ export const indexerClient = new IndexerClient(NETWORK.indexerUrl);
 
 /**
  * Fallback delivery method when the receiver's preference is unknown (e.g. a
- * raw meta-address with no account to read, or an unpublished account). Pool is
- * the safest, most private default.
+ * raw meta-address with no account to read, or an unpublished account). 'auto'
+ * lets the SDK pick the cheapest route that works (account for native XLM > 1,
+ * pool otherwise), and resolves fine even with no account to read.
  */
-export const DEFAULT_METHOD = 'pool' as const;
+export const DEFAULT_METHOD = 'auto' as const;

@@ -41,7 +41,7 @@ export function parsePayParams(sp: URLSearchParams): PayParams | null {
     to,
     amount: sp.get('amount')?.trim() || undefined,
     asset: sp.get('asset')?.trim() || undefined,
-    method: method === 'account' || method === 'pool' ? method : undefined,
+    method: method === 'account' || method === 'pool' || method === 'auto' ? method : undefined,
   };
 }
 

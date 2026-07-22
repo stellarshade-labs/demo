@@ -94,7 +94,7 @@ function decodeMethod(encoded?: string): ReceiveMethod | undefined {
   if (!encoded) return undefined;
   try {
     const text = new TextDecoder().decode(base64ToBytes(encoded));
-    return text === 'account' || text === 'pool' ? text : undefined;
+    return text === 'account' || text === 'pool' || text === 'auto' ? text : undefined;
   } catch {
     return undefined;
   }
