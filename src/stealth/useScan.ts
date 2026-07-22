@@ -42,14 +42,9 @@ function dedupe(existing: Payment[], incoming: Payment[]): Payment[] {
   return [...seen.values()];
 }
 
-export function useScan(
-  address: string | null,
-  keys: StealthKeys | null,
-  opts?: { auto?: boolean; pollIntervalMs?: number },
-) {
-  const auto = opts?.auto ?? true;
-  const pollIntervalMs = opts?.pollIntervalMs ?? 0;
-  const [state, setState] = useState<ScanState>({
+/** The empty scan state — used when there's no identity and on identity switch. */
+function emptyState(): ScanState {
+  return {
     payments: [],
     claimed: new Set(),
     cursor: undefined,
@@ -59,7 +54,17 @@ export function useScan(
     lastSyncedAt: null,
     lastNewPayments: [],
     scanTick: 0,
-  });
+  };
+}
+
+export function useScan(
+  address: string | null,
+  keys: StealthKeys | null,
+  opts?: { auto?: boolean; pollIntervalMs?: number },
+) {
+  const auto = opts?.auto ?? true;
+  const pollIntervalMs = opts?.pollIntervalMs ?? 0;
+  const [state, setState] = useState<ScanState>(emptyState);
 
   const inFlight = useRef(false);
   const hydratedFor = useRef<string | null>(null);
@@ -73,7 +78,7 @@ export function useScan(
   );
 
   const scan = useCallback(
-    async (opts?: { fromScratch?: boolean }) => {
+    async (opts?: { fromScratch?: boolean; cursor?: ScanCursor }) => {
       if (!keys || !address || inFlight.current) return;
       inFlight.current = true;
 
@@ -85,7 +90,7 @@ export function useScan(
       }));
 
       try {
-        const cursor = opts?.fromScratch ? undefined : state.cursor;
+        const cursor = opts?.fromScratch ? undefined : (opts?.cursor ?? state.cursor);
         const result = await stealthClient.scanWithCursor(keys, cursor ? { cursor } : undefined);
 
         setState((prev) => {
@@ -155,22 +160,19 @@ export function useScan(
   useEffect(() => {
     if (!keys || !address) {
       hydratedFor.current = null;
-      setState({
-        payments: [],
-        claimed: new Set(),
-        cursor: undefined,
-        loading: false,
-        cold: false,
-        error: null,
-        lastSyncedAt: null,
-        lastNewPayments: [],
-        scanTick: 0,
-      });
+      setState(emptyState());
       return;
     }
 
-    if (hydratedFor.current === address) return;
-    hydratedFor.current = address;
+    // Key hydration on the full identity, not the payout address alone — the
+    // same address can be paired with different stealth keys, and each identity
+    // has its own payments and cursor.
+    const fingerprint = `${address}:${keys.metaAddress}`;
+    if (hydratedFor.current === fingerprint) return;
+    // Identity switched: drop the previous identity's payments/cursor entirely
+    // before loading this one's cache, so nothing leaks across the switch.
+    setState(emptyState());
+    hydratedFor.current = fingerprint;
 
     let cancelled = false;
     (async () => {
@@ -186,15 +188,18 @@ export function useScan(
         }));
       }
       // Honour the auto-scan-on-open setting: still hydrate from cache, but
-      // only walk the ledger automatically when enabled.
-      if (!cancelled && auto) void scan();
+      // only walk the ledger automatically when enabled. Resume from the
+      // freshly-loaded cache cursor explicitly so a switch never walks the
+      // previous identity's ledger range (undefined → full scan when no cache).
+      if (!cancelled && auto) void scan({ cursor: cached?.cursor });
     })();
 
     return () => {
       cancelled = true;
     };
     // `scan` intentionally omitted: it changes with cursor, and re-running this
-    // effect on every cursor update would restart hydration in a loop.
+    // effect on every cursor update would restart hydration in a loop. Keyed on
+    // [keys, address] so it re-runs on identity change (both change on switch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keys, address]);
 
