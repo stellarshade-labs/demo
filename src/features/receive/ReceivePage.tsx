@@ -112,8 +112,8 @@ export function ReceivePage() {
         </div>
 
         <Panel eyebrow="At a glance" title="Balance">
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
+          <div className="grid grid-cols-2 items-end gap-4">
+            <div className="min-w-0">
               <div className="label-eyebrow mb-1.5">Payout balance</div>
               <div className="font-mono text-2xl font-semibold text-ink-50">
                 {balance.native !== null ? (
@@ -146,7 +146,7 @@ export function ReceivePage() {
                 <p className="mt-1 text-xs text-ink-500">Account not yet funded on-chain.</p>
               )}
             </div>
-            <div className="text-right">
+            <div className="min-w-0 text-right">
               <div className="label-eyebrow mb-1.5">Claimable</div>
               {claimableByAsset.length === 0 ? (
                 <div className="font-mono text-2xl font-semibold text-copper-300">—</div>
