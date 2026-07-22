@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, LogOut, Wallet } from 'lucide-react';
 import { useWallet } from '@/wallet/WalletProvider';
 import { truncate } from '@/lib/format';
@@ -6,12 +6,15 @@ import { explorerAccountUrl } from '@/config/network';
 import { Button } from '@/components/ui/Button';
 import { CopyButton } from '@/components/ui/CopyField';
 import { Portal } from '@/components/ui/Portal';
+import { useAnchoredMenu } from '@/components/ui/useAnchoredMenu';
 import { WalletModal } from './WalletModal';
 
 export function ConnectButton() {
   const { status, address, connector, disconnect } = useWallet();
   const [modalOpen, setModalOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const coords = useAnchoredMenu(triggerRef, menuOpen, { width: 288, align: 'right' });
 
   if (status === 'reconnecting') {
     return (
@@ -43,6 +46,7 @@ export function ConnectButton() {
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setMenuOpen((open) => !open)}
         className="flex h-8 items-center gap-2 border border-ink-700 bg-ink-850 px-2.5 text-[13px] transition-colors hover:border-ink-600"
@@ -54,14 +58,15 @@ export function ConnectButton() {
         <ChevronDown className="size-3.5 text-ink-500" />
       </button>
 
-      {menuOpen && (
-        <>
+      {menuOpen && coords && (
+        <Portal>
           {/* Portaled, or the header's backdrop-filter clamps it to the 56px
               header and clicking anywhere below it fails to dismiss the menu. */}
-          <Portal>
-            <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
-          </Portal>
-          <div className="absolute right-0 z-20 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
+          <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+          <div
+            style={{ position: 'fixed', top: coords.top, left: coords.left, width: 288 }}
+            className="z-20 border border-ink-700 bg-ink-850 shadow-xl shadow-black/40"
+          >
             <div className="border-b border-ink-700 px-4 py-3">
               <div className="label-eyebrow mb-1.5">{connector?.name ?? 'Wallet'}</div>
               <div className="flex items-center justify-between gap-2">
@@ -89,7 +94,7 @@ export function ConnectButton() {
               Disconnect
             </button>
           </div>
-        </>
+        </Portal>
       )}
     </div>
   );

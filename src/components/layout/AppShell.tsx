@@ -30,6 +30,7 @@ import { ONBOARDING_MODE_KEY } from '@/features/onboarding/OnboardingFlow';
 import { truncateMeta } from '@/lib/format';
 import { ConnectButton } from '@/components/wallet/ConnectButton';
 import { Portal } from '@/components/ui/Portal';
+import { useAnchoredMenu } from '@/components/ui/useAnchoredMenu';
 import { StatusDot } from '@/components/ui/Status';
 import { ThemeToggle } from '@/theme/ThemeToggle';
 import { ShadeMark } from './ShadeMark';
@@ -320,12 +321,19 @@ function IdentitySwitcher() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const coords = useAnchoredMenu(triggerRef, open, { width: 256, align: 'right' });
 
   useEffect(() => {
     if (!open) return;
+    // The menu is portaled outside the trigger, so an outside-click check must
+    // spare both the trigger and the menu itself.
     const onDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!triggerRef.current?.contains(target) && !menuRef.current?.contains(target)) {
+        setOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
     document.addEventListener('mousedown', onDown);
@@ -342,8 +350,9 @@ function IdentitySwitcher() {
   const ActiveIcon = SOURCE_ICON[active.source];
 
   return (
-    <div ref={ref} className="relative" data-tour="identity">
+    <div className="relative" data-tour="identity">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
@@ -358,72 +367,76 @@ function IdentitySwitcher() {
         <ChevronDown className="size-3.5 shrink-0 text-ink-500" />
       </button>
 
-      {open && (
-        <div
-          role="menu"
-          className="animate-shade-rise absolute right-0 top-full z-40 mt-1.5 w-64 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-900 py-1 shadow-lg"
-        >
-          <div className="label-eyebrow px-3 py-1.5">Identities</div>
-          <div className="max-h-64 overflow-y-auto">
-            {identities.map((i) => {
-              const Icon = SOURCE_ICON[i.source];
-              const isActive = i.id === activeId;
-              return (
-                <button
-                  key={i.id}
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    switchIdentity(i.id);
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-ink-850"
-                >
-                  <Icon className="size-3.5 shrink-0 text-copper-400" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] text-ink-100">
-                      {i.label?.trim() || 'Unnamed identity'}
+      {open && coords && (
+        <Portal>
+          <div
+            ref={menuRef}
+            role="menu"
+            style={{ position: 'fixed', top: coords.top, left: coords.left, width: 256 }}
+            className="animate-shade-rise z-40 border border-ink-700 bg-ink-900 py-1 shadow-lg"
+          >
+            <div className="label-eyebrow px-3 py-1.5">Identities</div>
+            <div className="max-h-64 overflow-y-auto">
+              {identities.map((i) => {
+                const Icon = SOURCE_ICON[i.source];
+                const isActive = i.id === activeId;
+                return (
+                  <button
+                    key={i.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      switchIdentity(i.id);
+                      setOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2.5 px-3 py-2 text-left transition-colors hover:bg-ink-850"
+                  >
+                    <Icon className="size-3.5 shrink-0 text-copper-400" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] text-ink-100">
+                        {i.label?.trim() || 'Unnamed identity'}
+                      </span>
+                      <span className="block truncate font-mono text-[11px] text-ink-500">
+                        {truncateMeta(i.metaAddress)}
+                      </span>
                     </span>
-                    <span className="block truncate font-mono text-[11px] text-ink-500">
-                      {truncateMeta(i.metaAddress)}
-                    </span>
-                  </span>
-                  {isActive && <Check className="size-3.5 shrink-0 text-copper-400" />}
-                </button>
-              );
-            })}
-          </div>
+                    {isActive && <Check className="size-3.5 shrink-0 text-copper-400" />}
+                  </button>
+                );
+              })}
+            </div>
 
-          <div className="mt-1 border-t border-ink-700 pt-1">
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                // Clear the wallet-resume flag so the flow always opens fresh at
-                // the "choose" step rather than jumping into the wallet step.
-                sessionStorage.removeItem(ONBOARDING_MODE_KEY);
-                setOpen(false);
-                setAdding(true);
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-200 transition-colors hover:bg-ink-850"
-            >
-              <Plus className="size-3.5 shrink-0 text-copper-400" />
-              Add identity
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                navigate('/settings');
-              }}
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-400 transition-colors hover:bg-ink-850 hover:text-ink-100"
-            >
-              <SlidersHorizontal className="size-3.5 shrink-0" />
-              Manage in Settings
-            </button>
+            <div className="mt-1 border-t border-ink-700 pt-1">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  // Clear the wallet-resume flag so the flow always opens fresh at
+                  // the "choose" step rather than jumping into the wallet step.
+                  sessionStorage.removeItem(ONBOARDING_MODE_KEY);
+                  setOpen(false);
+                  setAdding(true);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-200 transition-colors hover:bg-ink-850"
+              >
+                <Plus className="size-3.5 shrink-0 text-copper-400" />
+                Add identity
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/settings');
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-ink-400 transition-colors hover:bg-ink-850 hover:text-ink-100"
+              >
+                <SlidersHorizontal className="size-3.5 shrink-0" />
+                Manage in Settings
+              </button>
+            </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       <AddIdentityModal open={adding} onClose={() => setAdding(false)} />
