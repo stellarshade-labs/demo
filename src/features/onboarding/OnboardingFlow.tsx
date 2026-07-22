@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useIdentity } from '@/identity/IdentityProvider';
+import type { IdentitySource } from '@/identity/identityCrypto';
 import { downloadBackup } from '@/identity/backup';
 import { truncateMeta } from '@/lib/format';
 import { Button } from '@/components/ui/Button';
@@ -37,7 +38,7 @@ const MIN_PASSPHRASE = 8;
 // the in-memory draft (secret keys we never persist), so 'create' is as far as a
 // reload can restore.
 const RESUME_KEY = 'shade:onboarding-resume';
-const MODE_KEY = 'shade:onboarding-mode';
+export const ONBOARDING_MODE_KEY = 'shade:onboarding-mode';
 
 export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
   const identity = useIdentity();
@@ -128,6 +129,7 @@ export function OnboardingFlow({ onComplete }: { onComplete: () => void }) {
             value={publishPref}
             onChange={setPublishPref}
             finishing={finishing}
+            source={identity.draft?.source ?? null}
             onFinish={async () => {
               setFinishing(true);
               try {
@@ -193,17 +195,24 @@ export function CreateStep({
   /** `imported` is true only when restoring a phrase the user already had. */
   onCreated: (imported: boolean) => void;
 }) {
-  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic' | 'import'>(() =>
-    sessionStorage.getItem(MODE_KEY) === 'wallet' ? 'wallet' : 'choose',
-  );
+  const { status: walletStatus } = useWallet();
+  const [mode, setMode] = useState<'choose' | 'wallet' | 'mnemonic' | 'import'>(() => {
+    // Only resume the wallet step for a genuine in-flight connect (the iOS
+    // deep-link reload case). A fresh open — where nothing is connecting —
+    // always starts at 'choose', even if a stale MODE_KEY lingers.
+    const connecting = walletStatus === 'connecting' || walletStatus === 'reconnecting';
+    return connecting && sessionStorage.getItem(ONBOARDING_MODE_KEY) === 'wallet'
+      ? 'wallet'
+      : 'choose';
+  });
 
   useEffect(() => {
     // Only the wallet path deep-links away (and risks a reload); the other
     // modes never leave the page, so 'wallet' is the only mode worth resuming.
     if (mode === 'wallet') {
-      sessionStorage.setItem(MODE_KEY, 'wallet');
+      sessionStorage.setItem(ONBOARDING_MODE_KEY, 'wallet');
     } else {
-      sessionStorage.removeItem(MODE_KEY);
+      sessionStorage.removeItem(ONBOARDING_MODE_KEY);
     }
   }, [mode]);
 
@@ -811,13 +820,19 @@ export function PublishStep({
   onFinish,
   finishing,
   finishLabel = 'Finish setup',
+  source,
 }: {
   value: boolean;
   onChange: (v: boolean) => void;
   onFinish: () => void;
   finishing: boolean;
   finishLabel?: string;
+  source?: IdentitySource | null;
 }) {
+  // Wallet-free identities claim into a payout account that starts unfunded, so
+  // publishing can't hit the chain the instant they toggle this on. Set the
+  // expectation rather than imply an immediate on-chain write.
+  const deferred = source != null && source !== 'wallet';
   return (
     <div>
       <h2 className="text-xl font-bold tracking-tight text-ink-50">Make yourself reachable?</h2>
@@ -830,7 +845,11 @@ export function PublishStep({
           selected={value}
           icon={<Globe className="size-4.5" />}
           title="Publish my address"
-          description="Anyone can pay you just by knowing your public address: we publish your meta-address on-chain so they can look it up. Convenient, but it's public that this account uses Shade."
+          description={
+            deferred
+              ? "Anyone can pay you just by knowing your public address. We'll publish your meta-address on-chain automatically once your payout account is funded, so they can look it up. It's then public that this account uses Shade."
+              : "Anyone can pay you just by knowing your public address: we publish your meta-address on-chain so they can look it up. Convenient, but it's public that this account uses Shade."
+          }
           onClick={() => onChange(true)}
         />
         <ChoiceCard

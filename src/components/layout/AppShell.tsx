@@ -25,6 +25,7 @@ import { useIdentity } from '@/identity/IdentityProvider';
 import type { IdentitySource } from '@/identity/identityCrypto';
 import type { PublicIdentity } from '@/identity/identityStore';
 import { AddIdentityModal } from '@/features/onboarding/AddIdentityModal';
+import { ONBOARDING_MODE_KEY } from '@/features/onboarding/OnboardingFlow';
 import { truncateMeta } from '@/lib/format';
 import { ConnectButton } from '@/components/wallet/ConnectButton';
 import { Portal } from '@/components/ui/Portal';
@@ -349,6 +350,9 @@ function IdentitySwitcher() {
               type="button"
               role="menuitem"
               onClick={() => {
+                // Clear the wallet-resume flag so the flow always opens fresh at
+                // the "choose" step rather than jumping into the wallet step.
+                sessionStorage.removeItem(ONBOARDING_MODE_KEY);
                 setOpen(false);
                 setAdding(true);
               }}

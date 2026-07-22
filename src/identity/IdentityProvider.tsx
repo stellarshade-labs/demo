@@ -367,6 +367,18 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       const keys = await keysFromWalletSignature(async (message) => signMessage(message), {
         verifyDeterminism: false,
       });
+      // Wallet derivation is deterministic, so re-signing with the same wallet
+      // recreates an identity the vault may already hold. Switch to it instead of
+      // stacking a duplicate. (No vault yet = first run, so no duplicate possible.)
+      const existing = vault?.identities.find(
+        (i) => i.stealthKeys.metaAddress === keys.metaAddress,
+      );
+      if (existing) {
+        setActiveIdRecord(existing.id);
+        setVault((prev) => (prev ? { ...prev, activeId: existing.id } : prev));
+        setError("You already have this wallet's identity.");
+        return null;
+      }
       const next = await buildDraft('wallet', keys, { walletAddress: address });
       setDraft(next);
       return next;
@@ -376,7 +388,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
     } finally {
       setCreating(false);
     }
-  }, [address, canDeriveKeys, signMessage, buildDraft]);
+  }, [address, canDeriveKeys, signMessage, buildDraft, vault, setActiveIdRecord]);
 
   /**
    * Recover an identity from the backup file Shade exported. This is how a
@@ -473,6 +485,21 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       if (!vault || !wrapKey || !saltRef.current) {
         throw new Error('Vault must be unlocked to add an identity.');
       }
+      // Defensive backstop against duplicates the create flow didn't catch —
+      // e.g. re-importing the same backup/mnemonic. Dedupe on the deterministic
+      // meta-address (or an identical payout account): switch to the existing
+      // identity and drop the draft rather than appending a second copy.
+      const duplicate = vault.identities.find(
+        (i) =>
+          i.stealthKeys.metaAddress === draft.stealthKeys.metaAddress ||
+          i.payout.publicKey === draft.payout.publicKey,
+      );
+      if (duplicate) {
+        setActiveIdRecord(duplicate.id);
+        setVault((prev) => (prev ? { ...prev, activeId: duplicate.id } : prev));
+        setDraft(null);
+        return;
+      }
       const nextVault: Vault = {
         ...vault,
         identities: [...vault.identities, draft],
@@ -490,7 +517,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       setVault(nextVault);
       setDraft(null);
     },
-    [draft, vault, wrapKey, vaultRecord, setVaultRecord],
+    [draft, vault, wrapKey, vaultRecord, setVaultRecord, setActiveIdRecord],
   );
 
   const switchIdentity = useCallback(
