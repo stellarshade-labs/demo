@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { BookUser, ChevronDown, Users } from 'lucide-react';
 import { truncate, truncateMeta } from '@/lib/format';
 import { Portal } from '@/components/ui/Portal';
+import { useAnchoredMenu } from '@/components/ui/useAnchoredMenu';
 import { useContacts, type Contact } from './contactsStore';
 
 /**
@@ -18,10 +19,13 @@ export function ContactPicker({
 }) {
   const contacts = useContacts((s) => s.contacts);
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const coords = useAnchoredMenu(triggerRef, open, { width: 288, align: 'right' });
 
   return (
     <div className="relative">
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="flex h-8 items-center gap-1.5 border border-ink-700 bg-ink-850 px-2.5 text-[13px] text-ink-300 transition-colors hover:border-ink-600 hover:text-ink-100"
@@ -31,12 +35,13 @@ export function ContactPicker({
         <ChevronDown className="size-3.5 text-ink-500" />
       </button>
 
-      {open && (
-        <>
-          <Portal>
-            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          </Portal>
-          <div className="absolute right-0 z-20 mt-1.5 w-72 max-w-[calc(100vw-1.5rem)] border border-ink-700 bg-ink-850 shadow-xl shadow-black/40">
+      {open && coords && (
+        <Portal>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div
+            style={{ position: 'fixed', top: coords.top, left: coords.left, width: 288 }}
+            className="z-20 border border-ink-700 bg-ink-850 shadow-xl shadow-black/40"
+          >
             {contacts.length === 0 ? (
               <div className="flex flex-col items-center gap-1.5 px-4 py-6 text-center">
                 <Users className="size-4 text-ink-600" />
@@ -80,7 +85,7 @@ export function ContactPicker({
               </ul>
             )}
           </div>
-        </>
+        </Portal>
       )}
     </div>
   );
