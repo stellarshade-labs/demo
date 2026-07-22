@@ -234,12 +234,14 @@ export function ReceivePage() {
               </p>
             </div>
 
-            {!pub.canManage && (
+            {pub.manageBlock && (
               <div className="mb-3">
                 <Notice tone="info">
-                  {source === 'wallet'
+                  {pub.manageBlock === 'wallet-disconnected'
                     ? 'Connect your wallet to publish or manage your address.'
-                    : 'Your payout account needs a little XLM before you can publish. Fund it, then come back.'}
+                    : pub.manageBlock === 'wallet-mismatch'
+                      ? `This identity belongs to a different wallet (${truncate(payoutAddress, 4, 4)}). Reconnect that wallet to publish or manage it.`
+                      : 'Your payout account needs a little XLM before you can publish. Fund it, then come back.'}
                 </Notice>
               </div>
             )}

@@ -8,10 +8,14 @@ import {
 } from '@/lib/metaRegistry';
 import { useWallet } from '@/wallet/WalletProvider';
 import { useSession } from '@/store/session';
+import { useBalance } from '@/stealth/useBalance';
 import { useIdentity, signerFromSecret } from './IdentityProvider';
 import { useIdentityStore, type ReceiveMethod } from './identityStore';
 
 export type PublishState = 'unknown' | 'published' | 'not-published';
+
+/** Why the active identity can't publish/manage right now, or null when it can. */
+export type ManageBlock = 'wallet-disconnected' | 'wallet-mismatch' | 'unfunded' | null;
 
 export interface PublishResult {
   status: 'success' | 'error';
@@ -29,17 +33,34 @@ export interface PublishResult {
  */
 export function usePublish() {
   const { source, metaAddress, payoutAddress, payoutSecret, setPublishPref } = useIdentity();
-  const { status, signTransaction } = useWallet();
+  const { status, address, signTransaction } = useWallet();
   const receiveMethod = useIdentityStore((s) => s.settings.receiveMethod);
   const addTx = useSession((s) => s.addTx);
   const updateTx = useSession((s) => s.updateTx);
+  const balance = useBalance(payoutAddress);
 
   const [publishState, setPublishState] = useState<PublishState>('unknown');
   const [publishedMethod, setPublishedMethod] = useState<ReceiveMethod | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<PublishResult | null>(null);
 
-  const canManage = source === 'wallet' ? status === 'connected' : Boolean(payoutSecret);
+  // Wallet identities must have the OWNING wallet connected (a different wallet
+  // can't sign for this payout account); wallet-free ones need their derived
+  // payout account funded on-chain before it can hold a reserve or sign a tx. We
+  // keep the wallet-free path blocked while the first balance load is in flight
+  // so the publish button isn't briefly enabled against an unknown balance.
+  const canManage =
+    source === 'wallet'
+      ? status === 'connected' && address === payoutAddress
+      : Boolean(payoutSecret) && !balance.loading && balance.funded;
+
+  const manageBlock: ManageBlock = canManage
+    ? null
+    : source === 'wallet'
+      ? status !== 'connected'
+        ? 'wallet-disconnected'
+        : 'wallet-mismatch'
+      : 'unfunded';
 
   const refresh = useCallback(async () => {
     if (!payoutAddress) return;
@@ -144,6 +165,7 @@ export function usePublish() {
     result,
     setResult,
     canManage,
+    manageBlock,
     source,
     payoutAddress,
     publish,
