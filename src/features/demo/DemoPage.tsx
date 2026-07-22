@@ -269,8 +269,8 @@ function LedgerRow({
         highlight
           ? 'animate-shade-rise border border-copper-600/40 bg-copper-500/5 px-2 py-1 text-ink-200'
           : dim
-            ? 'px-2 py-1 text-ink-600'
-            : 'px-2 py-1 text-ink-400'
+            ? 'truncate px-2 py-1 text-ink-600'
+            : 'truncate px-2 py-1 text-ink-400'
       }
     >
       {children}

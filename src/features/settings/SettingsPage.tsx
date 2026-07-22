@@ -229,7 +229,11 @@ export function SettingsPage() {
               label="Default claim destination"
               mono
               value={settings.claimDestination}
-              placeholder={identity.payoutAddress ?? 'G…'}
+              placeholder={
+                identity.payoutAddress
+                  ? `${identity.payoutAddress.slice(0, 6)}… (this identity)`
+                  : 'G…'
+              }
               onChange={(e) => setSettings({ claimDestination: e.target.value })}
               error={
                 settings.claimDestination.trim() &&

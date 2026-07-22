@@ -348,7 +348,14 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
 }
 
 /* ——— phone-size film adjustments (late in the sheet so they win) ——— */
+.nav a.lnk{padding:12px 8px;margin:-12px -2px}
+.gh{padding:11px;margin:-11px -4px}
+.foot .r a{padding:10px 4px;margin:-10px 0}
 @media(max-width:760px){
+  #corridor .beat-start{
+    padding:26px 22px;
+    background:radial-gradient(ellipse closest-side,rgba(8,9,11,.9) 55%,rgba(8,9,11,0) 100%);
+  }
   /* inline-positioned label: pin to the card's right edge and let it wrap */
   .otlabel{
     left:auto!important;right:0!important;transform:none!important;
@@ -942,11 +949,12 @@ tlSever
 })();
 
 /* CH3 · THE CORRIDOR (horizontal) */
+const CORRIDOR_END = MOBILE ? '+=180%' : '+=260%';
 const corridorTween = gsap.to('#track', {
   x: () => -(track.scrollWidth - innerWidth),
   ease: 'none',
   scrollTrigger: {
-    trigger: '#corridor', start: 'top top', end: '+=260%',
+    trigger: '#corridor', start: 'top top', end: CORRIDOR_END,
     scrub: 0.6, pin: true, invalidateOnRefresh: true,
   },
 });
@@ -961,11 +969,11 @@ document.querySelectorAll('.cell').forEach(cell => {
 });
 /* corridor copy envelopes ride the same scroll span */
 gsap.timeline({
-  scrollTrigger: { trigger: '#corridor', start: 'top top', end: '+=260%', scrub: 0.6 },
+  scrollTrigger: { trigger: '#corridor', start: 'top top', end: CORRIDOR_END, scrub: 0.6 },
   defaults: { ease: 'none' },
 })
-  .fromTo('#beatCorrA', { autoAlpha: 1 }, { autoAlpha: 0, x: -60, duration: 0.18, ease: 'power1.in' }, 0.16)
-  .fromTo('#beatCorrB', { autoAlpha: 0, x: 60 }, { autoAlpha: 1, x: 0, duration: 0.18, ease: 'power1.out' }, 0.74);
+  .fromTo('#beatCorrA', { autoAlpha: 1 }, { autoAlpha: 0, x: MOBILE ? 0 : -60, duration: 0.18, ease: 'power1.in' }, 0.16)
+  .fromTo('#beatCorrB', { autoAlpha: 0, x: MOBILE ? 0 : 60 }, { autoAlpha: 1, x: 0, duration: 0.18, ease: 'power1.out' }, 0.68);
 
 /* CH4 · THE VIEW KEY */
 const tlView = gsap.timeline({
@@ -1030,11 +1038,14 @@ gsap.timeline({
 /* hero mark pulse */
 gsap.to('#heromark', { opacity: 0.55, duration: 1.6, ease: 'sine.inOut', yoyo: true, repeat: -1 });
 
-/* header state */
-ScrollTrigger.create({
-  start: 80, onToggle: self => document.getElementById('hdr').classList.toggle('solid', self.isActive),
-  onUpdate: () => {}, end: 'max',
-});
+/* header state — plain scroll check so the bar never goes transparent at the
+   very bottom (a trigger with end:'max' un-toggles past its end) */
+{
+  const hdr = document.getElementById('hdr');
+  const onScroll = () => hdr.classList.toggle('solid', window.scrollY > 80);
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+}
 
 /* content reveals */
 document.body.classList.remove('norev');

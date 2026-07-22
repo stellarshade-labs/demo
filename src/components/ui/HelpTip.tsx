@@ -72,7 +72,7 @@ export function HelpTip({ label, children }: { label: string; children: ReactNod
         ref={triggerRef}
         type="button"
         aria-label={label}
-        className="inline-flex size-4 items-center justify-center align-middle text-ink-500 transition-colors hover:text-copper-400 focus-visible:text-copper-400"
+        className="-m-2 p-2 inline-flex size-4 items-center justify-center align-middle text-ink-500 transition-colors hover:text-copper-400 focus-visible:text-copper-400"
         onMouseEnter={show}
         onMouseLeave={() => hide(120)}
         onFocus={show}

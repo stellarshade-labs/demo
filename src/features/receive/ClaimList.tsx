@@ -398,37 +398,31 @@ export function ClaimList() {
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-ink-700 px-5 py-3">
-        <label
-          className={`flex items-center gap-2 text-xs ${
-            relayerAvailable ? 'cursor-pointer text-ink-400' : 'cursor-not-allowed text-ink-600'
-          }`}
-          title={
-            health.relayerRequiresCredit
-              ? 'This relayer requires prepaid credit, which this demo does not have.'
-              : health.relayer === 'ok'
-                ? 'Submit via the relayer instead of paying the fee directly.'
-                : 'The relayer is unreachable.'
-          }
-        >
-          <input
-            type="checkbox"
-            checked={useRelayer}
-            disabled={!relayerAvailable}
-            onChange={(e) => setRelayerOptIn(e.target.checked)}
-            className="size-3.5 accent-[#c8763c]"
-          />
-          <Radio className="size-3" />
-          Submit through relayer
-          <span className="text-ink-600">
-            {health.relayerRequiresCredit
-              ? ' — unavailable, relayer is credit-gated'
-              : health.relayer === 'down'
-                ? ' — unavailable, relayer unreachable'
-                : walletFree
-                  ? ' — sponsors the fee, no wallet needed'
-                  : ' — hides your IP and fee-payer link'}
-          </span>
-        </label>
+        {/* Only offered when the relayer can actually take the claim — an
+            unusable disabled row is noise, not information. */}
+        {relayerAvailable ? (
+          <label
+            className="flex cursor-pointer items-center gap-2 text-xs text-ink-400"
+            title="Submit via the relayer instead of paying the fee directly."
+          >
+            <input
+              type="checkbox"
+              checked={useRelayer}
+              disabled={!relayerAvailable}
+              onChange={(e) => setRelayerOptIn(e.target.checked)}
+              className="size-3.5 accent-[#c8763c]"
+            />
+            <Radio className="size-3" />
+            Submit through relayer
+            <span className="text-ink-600">
+              {walletFree
+                ? ' — sponsors the fee, no wallet needed'
+                : ' — hides your IP and fee-payer link'}
+            </span>
+          </label>
+        ) : (
+          <span />
+        )}
         <span className="font-mono text-[10px] text-ink-600">
           {scan.loading
             ? 'scanning…'

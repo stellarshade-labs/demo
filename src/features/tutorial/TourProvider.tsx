@@ -166,7 +166,12 @@ function TourOverlay({
     measure();
     // The drawer slides in over ~200ms — keep re-measuring until it settles.
     const raf = requestAnimationFrame(measure);
-    const settle = window.setTimeout(measure, 260);
+    // Re-send the drawer event on the settle tick too: on the very first step
+    // the shell may mount (and register its listener) after our first dispatch.
+    const settle = window.setTimeout(() => {
+      window.dispatchEvent(new Event(usesDrawer ? 'shade:open-nav' : 'shade:close-nav'));
+      measure();
+    }, 260);
     window.addEventListener('resize', measure);
     window.addEventListener('scroll', measure, true);
     return () => {
@@ -261,7 +266,7 @@ function TourOverlay({
           <button
             type="button"
             onClick={onSkip}
-            className="text-ink-500 hover:text-ink-100"
+            className="-m-2 p-2 text-ink-500 hover:text-ink-100"
             aria-label="Skip tutorial"
           >
             <X className="size-3.5" />
@@ -274,7 +279,7 @@ function TourOverlay({
           <button
             type="button"
             onClick={onSkip}
-            className="text-xs text-ink-500 hover:text-ink-200"
+            className="-m-2 p-2 text-xs text-ink-500 hover:text-ink-200"
           >
             Skip
           </button>
