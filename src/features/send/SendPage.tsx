@@ -108,11 +108,21 @@ export function SendPage() {
     resolution.state === 'resolved' ? resolution.method : DEFAULT_METHOD;
   const effectiveMethod: ReceiveMethod = methodOverride ?? resolvedMethod;
 
+  // 'auto' is resolved by the SDK per payment: tokens (and native ≤ 1 XLM) route
+  // via pool, larger native amounts via account. Warnings and the delivery
+  // explainer must reflect that resolved route, not the literal 'auto'. The
+  // send() call still passes the raw method through for the SDK to resolve.
+  const resolvedForDisplay: ReceiveMethod =
+    effectiveMethod === 'auto' ? (token || parsedAmount <= 1 ? 'pool' : 'account') : effectiveMethod;
+
   const accountTokenWarning =
-    resolution.state === 'resolved' && effectiveMethod === 'account' && token;
+    resolution.state === 'resolved' && resolvedForDisplay === 'account' && token;
   // The account method funds a classic native payment; the SDK enforces > 1 XLM.
   const accountNativeTooLow =
-    resolution.state === 'resolved' && effectiveMethod === 'account' && !token && parsedAmount <= 1;
+    resolution.state === 'resolved' &&
+    resolvedForDisplay === 'account' &&
+    !token &&
+    parsedAmount <= 1;
 
   const canSubmit =
     connected &&
@@ -322,6 +332,9 @@ export function SendPage() {
                     can change it.
                     <br />
                     <br />
+                    <strong>Auto:</strong> account for XLM, pool for tokens — picks the cheapest that
+                    works.
+                    <br />
                     <strong>Pool:</strong> value sits in the stealth-pool contract until they claim.
                     Private, any asset, cheapest.
                     <br />
@@ -424,7 +437,7 @@ export function SendPage() {
               one-time stealth address only the recipient can spend from.
             </Step>
             <Step n={3} label="Deliver" state={sendPhase === 3 ? 'active' : sendPhase === 4 ? 'done' : 'idle'}>
-              {effectiveMethod === 'account'
+              {resolvedForDisplay === 'account'
                 ? 'Fund a one-time classic Stellar account for the recipient.'
                 : 'Deposit the funds into the pool contract against that stealth address.'}
             </Step>
@@ -434,14 +447,25 @@ export function SendPage() {
           </ol>
         </Panel>
 
-        <Panel eyebrow="Delivery" title={effectiveMethod === 'account' ? 'Account method' : 'Pool method'}>
+        <Panel
+          eyebrow="Delivery"
+          title={
+            effectiveMethod === 'auto'
+              ? 'Auto method'
+              : resolvedForDisplay === 'account'
+                ? 'Account method'
+                : 'Pool method'
+          }
+        >
           <p className="text-[13px] leading-relaxed text-ink-400">
-            {effectiveMethod === 'account'
-              ? 'Direct delivery: a fresh classic Stellar account is created and funded for this payment. Native XLM only, and account funding is paid by you.'
-              : 'Value is held by the Soroban stealth-pool contract until claimed, so no new Stellar account has to be created and funded per payment.'}
+            {effectiveMethod === 'auto'
+              ? `Auto picks the cheapest route that works: ${resolvedForDisplay === 'account' ? 'this payment funds a one-time classic Stellar account.' : 'this payment goes through the pool contract.'}`
+              : resolvedForDisplay === 'account'
+                ? 'Direct delivery: a fresh classic Stellar account is created and funded for this payment. Native XLM only, and account funding is paid by you.'
+                : 'Value is held by the Soroban stealth-pool contract until claimed, so no new Stellar account has to be created and funded per payment.'}
           </p>
           <p className="mt-3 text-xs leading-relaxed text-ink-500">
-            Starts from the recipient&apos;s preference (pool when unknown), but you can change it on
+            Starts from the recipient&apos;s preference (auto when unknown), but you can change it on
             the form.
           </p>
         </Panel>
@@ -458,6 +482,7 @@ function MethodPicker({
   onChange: (value: ReceiveMethod) => void;
 }) {
   const options: { value: ReceiveMethod; label: string }[] = [
+    { value: 'auto', label: 'Auto' },
     { value: 'pool', label: 'Pool' },
     { value: 'account', label: 'Account' },
   ];

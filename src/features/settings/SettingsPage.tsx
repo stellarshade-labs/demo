@@ -95,6 +95,9 @@ export function SettingsPage() {
                 automatically when someone pays your published address.
                 <br />
                 <br />
+                <strong>Auto:</strong> account for XLM, pool for tokens — picks the cheapest that
+                works.
+                <br />
                 <strong>Pool:</strong> value sits in the Soroban contract until you claim. Private,
                 any asset, cheapest for senders.
                 <br />
@@ -111,6 +114,9 @@ export function SettingsPage() {
                 value={settings.receiveMethod}
                 onChange={(method) => setSettings({ receiveMethod: method })}
               />
+              <span className="text-[11px] text-ink-500">
+                Auto: account for XLM, pool for tokens — picks the cheapest that works.
+              </span>
               {pub.publishState === 'published' &&
                 pub.publishedMethod !== null &&
                 settings.receiveMethod === pub.publishedMethod && (
@@ -885,6 +891,7 @@ function MethodSegment({
   return (
     <Segment
       options={[
+        { value: 'auto', label: 'Auto' },
         { value: 'pool', label: 'Pool' },
         { value: 'account', label: 'Account' },
       ]}
