@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { useIdentity } from '@/identity/IdentityProvider';
 import { Portal } from '@/components/ui/Portal';
-import { CreateStep, BackupStep, PublishStep } from './OnboardingFlow';
+import { CreateStep, BackupStep, PublishStep, ONBOARDING_MODE_KEY } from './OnboardingFlow';
 
 /**
  * Add another identity to the already-unlocked vault. Reuses the onboarding
@@ -19,6 +19,12 @@ export function AddIdentityModal({ open, onClose }: { open: boolean; onClose: ()
   const [step, setStep] = useState<Step>('create');
   const [publishPref, setPublishPref] = useState(false);
   const [finishing, setFinishing] = useState(false);
+
+  // Opening the modal is always a fresh start: drop any stale wallet-resume flag
+  // so CreateStep begins at 'choose' rather than jumping into the wallet step.
+  useEffect(() => {
+    if (open) sessionStorage.removeItem(ONBOARDING_MODE_KEY);
+  }, [open]);
 
   if (!open) return null;
 
@@ -86,6 +92,7 @@ export function AddIdentityModal({ open, onClose }: { open: boolean; onClose: ()
                 onChange={setPublishPref}
                 finishing={finishing}
                 finishLabel="Add identity"
+                source={identity.draft?.source ?? null}
                 onFinish={async () => {
                   setFinishing(true);
                   try {
