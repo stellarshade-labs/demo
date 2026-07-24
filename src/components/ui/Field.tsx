@@ -34,7 +34,7 @@ export function Field({
         <input
           {...rest}
           id={inputId}
-          className={`h-11 w-full flex-1 bg-transparent px-3 text-sm text-ink-50 placeholder:text-ink-600 focus:outline-none ${
+          className={`h-11 w-full flex-1 bg-transparent px-3 text-sm text-ink-50 placeholder:text-ink-500 focus:outline-none ${
             mono ? 'font-mono tracking-tight' : ''
           }`}
         />

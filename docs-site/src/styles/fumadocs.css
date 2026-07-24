@@ -36,3 +36,16 @@ html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
 }
+
+/* Phone-width sticky bars: the 80% background + backdrop blur is not enough
+   to keep page text from reading through them while scrolling. Solid them. */
+#nd-subnav,
+[data-toc-popover] header {
+  background: var(--color-fd-background);
+}
+
+/* Long unbreakable tokens (keys, curve constants) in inline code must wrap
+   instead of clipping past the prose column on narrow screens. */
+article#nd-page code {
+  overflow-wrap: anywhere;
+}

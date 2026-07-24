@@ -351,10 +351,11 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
 .nav a.lnk{padding:12px 8px;margin:-12px -2px}
 .gh{padding:11px;margin:-11px -4px}
 .foot .r a{padding:10px 4px;margin:-10px 0}
+.btn{white-space:nowrap}
 @media(max-width:760px){
   #corridor .beat-start{
-    padding:26px 22px;
-    background:radial-gradient(ellipse closest-side,rgba(8,9,11,.9) 55%,rgba(8,9,11,0) 100%);
+    padding:30px 26px;
+    background:radial-gradient(ellipse closest-side,rgba(8,9,11,.92) 60%,rgba(8,9,11,0) 100%);
   }
   /* inline-positioned label: pin to the card's right edge and let it wrap */
   .otlabel{
@@ -365,6 +366,55 @@ button{font:inherit;background:none;border:0;color:inherit;cursor:pointer}
   #corridor .track{gap:44px;padding:0 40vw 0 50vw}
   .cell.d2{transform:scale(.8)}
   .cell.d3{transform:scale(.6)}
+}
+/* very narrow phones (≤400px): the two account cards can't share a row at
+   full width, and the default type scale eats the scene's vertical room */
+@media(max-width:400px){
+  .acct{width:clamp(124px,41vw,150px)}
+  .beat h2{font-size:clamp(25px,8.4vw,30px)}
+  .pairrow{margin-bottom:clamp(120px,26vh,200px)}
+  .beat-bl{bottom:56px}
+}
+@media(max-width:400px){
+  .hdr{padding:0 12px}
+  .nav{gap:10px}
+  .nav .btn{padding:9px 12px;font-size:11px;letter-spacing:.06em}
+  .lockup .word{font-size:14px}
+}
+@media(max-width:350px){
+  /* not enough lane for four nav items — GitHub also lives in the footer */
+  .nav .gh{display:none}
+}
+/* short viewports: the scroll cue has no clear lane below the CTAs */
+@media(max-height:600px){
+  #hero .cue{display:none}
+}
+/* short desktop/laptop viewports: the four-line caption needs the cards a
+   touch higher or its eyebrow grazes the sender card */
+@media(min-width:761px) and (max-height:850px){
+  .pairrow{margin-bottom:clamp(120px,24vh,200px)}
+}
+/* landscape phones (≤520px tall): compact every scene so captions, chips and
+   cards keep their own space inside one short viewport */
+@media(max-height:520px){
+  #hero .mark-pulse{margin-bottom:12px}
+  #hero .sub{margin-top:14px;font-size:14px}
+  #hero .ctas{margin-top:18px}
+  .beat h2{font-size:clamp(22px,6.4vh,34px);margin-bottom:8px}
+  .beat p{font-size:13px}
+  .beat .eyebrow{margin-bottom:8px}
+  .beat-bl{bottom:14px;left:20px}
+  .pairrow{margin-bottom:clamp(32px,12vh,64px)}
+  .acct{width:clamp(140px,19vw,200px)}
+  .obschip,.vkchip{top:72px}
+  /* the one-time label can't sit above the card here (the header is), and the
+     card hugs the right edge — grow the label leftward from the card's right */
+  .otlabel{left:auto!important;right:0!important;transform:none!important;
+    bottom:auto!important;top:calc(100% + 10px)!important;white-space:nowrap;max-width:none;text-align:right}
+  #viewkey .vgrid{gap:clamp(12px,2.4vh,24px)}
+  .vsq{width:clamp(22px,5vh,34px);height:clamp(22px,5vh,34px)}
+  .claimlock svg{width:80px;height:80px}
+  .claimlock .lockword{font-size:22px;margin-top:16px}
 }
 </style>
 </head>
@@ -904,7 +954,10 @@ tlLink
   .to('#obs1b', { opacity: 1, duration: 0.04 }, 0.58)
   .fromTo('#glow1', { opacity: 0.14 }, { opacity: 0.42, duration: 0.1, yoyo: true, repeat: 1 }, 0.58)
   .to('#beatLink', { autoAlpha: 0, y: -30, duration: 0.1, ease: 'power2.in' }, 0.86)
-  .to('#link .pair, #obschip1', { autoAlpha: 0, duration: 0.1 }, 0.9);
+  /* the cards stay lit through the pin-out: the sever scene opens on the same
+     two cards, so the handoff reads as one continuous shot instead of a black
+     gap between the pins. Only the observer chip leaves. */
+  .to('#obschip1', { autoAlpha: 0, duration: 0.1 }, 0.9);
 
 /* CH2 · SEVERANCE */
 const tlSever = gsap.timeline({
@@ -913,7 +966,6 @@ const tlSever = gsap.timeline({
 });
 const scrambleState = { f: 0 };
 tlSever
-  .from('#sever .pair', { autoAlpha: 0, duration: 0.08 }, 0)
   .from('#beatSever', { autoAlpha: 0, y: 44, duration: 0.12, ease: 'power2.out' }, 0.05)
   /* the snap */
   .to('#line2L,#glow2L', { scaleX: 0, transformOrigin: 'left center', duration: 0.14, ease: 'power3.in' }, 0.24)

@@ -11,8 +11,10 @@
   --color-ink-800: #191c21; /* raised surface, hover */
   --color-ink-700: #232830; /* hairline border */
   --color-ink-600: #333a45; /* hairline border, emphasized */
+  --color-ink-500: #5d6673; /* faint text: timestamps, waiting states */
   --color-ink-400: #6b7480; /* muted text */
   --color-ink-300: #8d97a4; /* secondary text */
+  --color-ink-200: #b2bac4; /* emphasized inline text */
   --color-ink-100: #d6dae0; /* primary text */
   --color-ink-50: #f0f2f5; /* headings */
 
@@ -50,8 +52,10 @@ html[data-theme='light'] {
   --color-ink-800: #e7e7e2; /* raised surface, hover */
   --color-ink-700: #e0e0da; /* hairline border */
   --color-ink-600: #cbcbc3; /* hairline border, emphasized */
+  --color-ink-500: #6f6f66; /* faint text: timestamps, waiting states */
   --color-ink-400: #6d6d64; /* muted text */
   --color-ink-300: #53534b; /* secondary text */
+  --color-ink-200: #3b3b33; /* emphasized inline text */
   --color-ink-100: #26261f; /* primary text */
   --color-ink-50: #131310; /* headings */
 

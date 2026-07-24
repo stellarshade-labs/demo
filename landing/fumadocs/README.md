@@ -1,10 +1,12 @@
 # Vendored docs build
 
-Prebuilt Fumadocs output from `stellarshade-labs/website-dev`, re-themed from
-slate to the copper/graphite palette, and the docs nav re-branded to the
-Shade square mark (see `theme-copper.patch` — apply it to website-dev and
-rebuild to regenerate).
+Prebuilt Fumadocs output, consumed by `scripts/assemble-site.mjs` which places
+`docs/`, `_astro/`, and `api/` at the site root.
 
-To refresh: in website-dev run `npm install && npm run build`, then copy
-`dist/docs`, `dist/_astro`, `dist/api` over the same names here.
-`scripts/assemble-site.mjs` places them at the site root.
+The source lives in-house at `docs-site/` (Astro + Fumadocs, copper/graphite
+theme, Shade square lockup in the nav). To refresh after editing content or
+styles there, run `npm run build:docs` from the repo root — it builds
+`docs-site/` (installing its deps on first run) and copies the output here.
+
+`theme-copper.patch` is the historical recolor diff from the original
+`stellarshade-labs/website-dev` vendoring, kept for reference.

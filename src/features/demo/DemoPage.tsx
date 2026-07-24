@@ -60,7 +60,9 @@ export function DemoPage() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      {/* minmax(0,1fr) below lg too: the observer panel's nowrap ledger rows
+          must never widen the single column past the viewport */}
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           {/* Step 1 — send */}
           <DemoStep
@@ -269,7 +271,7 @@ function LedgerRow({
         highlight
           ? 'animate-shade-rise border border-copper-600/40 bg-copper-500/5 px-2 py-1 text-ink-200'
           : dim
-            ? 'truncate px-2 py-1 text-ink-600'
+            ? 'truncate px-2 py-1 text-ink-500'
             : 'truncate px-2 py-1 text-ink-400'
       }
     >

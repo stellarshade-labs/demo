@@ -95,7 +95,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
                     <c.Icon className="size-5 text-ink-600" />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm text-ink-400">{c.name}</div>
-                      <div className="text-xs text-ink-600">Not detected</div>
+                      <div className="text-xs text-ink-500">Not detected</div>
                     </div>
                     <button
                       type="button"

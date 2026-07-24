@@ -414,7 +414,7 @@ export function ClaimList() {
             />
             <Radio className="size-3" />
             Submit through relayer
-            <span className="text-ink-600">
+            <span className="text-ink-500">
               {walletFree
                 ? ' — sponsors the fee, no wallet needed'
                 : ' — hides your IP and fee-payer link'}
@@ -423,7 +423,7 @@ export function ClaimList() {
         ) : (
           <span />
         )}
-        <span className="font-mono text-[10px] text-ink-600">
+        <span className="font-mono text-[10px] text-ink-500">
           {scan.loading
             ? 'scanning…'
             : scan.lastSyncedAt

@@ -143,7 +143,7 @@ export function AppShell({ children, sendOnly = false }: { children: ReactNode; 
           {children}
         </main>
 
-        <footer className="border-t border-ink-700 px-4 py-4 text-xs text-ink-600 sm:px-6">
+        <footer className="border-t border-ink-700 px-4 py-4 text-xs text-ink-500 sm:px-6">
           Demo build against Shade on {NETWORK.label}. The protocol's cryptography is pending
           external audit, so do not use it with real value.
         </footer>
@@ -465,7 +465,7 @@ function ServiceRow({
     >
       <StatusDot state={state === 'checking' ? 'wait' : state === 'ok' ? 'ok' : 'bad'} />
       <span className="flex-1">{name}</span>
-      {detail && <span className="font-mono text-[10px] text-ink-600">{detail}</span>}
+      {detail && <span className="font-mono text-[10px] text-ink-500">{detail}</span>}
       <ArrowUpRight className="size-3 opacity-0 transition-opacity group-hover:opacity-100" />
     </a>
   );
